@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner.jsx";
 import { Toaster } from "@/components/ui/toaster.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip.jsx";
@@ -14,7 +14,7 @@ import IssuesMap from "./pages/IssuesMap.jsx";
 import Leaderboard from "./pages/LeaderboardLive.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminLogin from "./pages/AdminLogin.jsx";
-import AdminRegister from "./pages/AdminRegister.jsx";
+import EmployeeMaster from "./pages/EmployeeMaster.jsx";
 import WardProfile from "./pages/WardProfileLive.jsx";
 import Profile from "./pages/ProfileAuth.jsx";
 import MyReports from "./pages/MyReports.jsx";
@@ -38,10 +38,13 @@ const App = () => (<QueryClientProvider client={queryClient}>
                 <Route path="/map" element={<IssuesMap />}/>
                 <Route path="/leaderboard" element={<Leaderboard />}/>
                 <Route path="/ward/:id" element={<WardProfile />}/>
-                <Route path="/admin" element={<AdminDashboard />}/>
-                <Route path="/admin/ward-master" element={<WardMasterAdmin />}/>
-                <Route path="/admin/login" element={<AdminLogin />}/>
-                <Route path="/admin/register" element={<AdminRegister />}/>
+                <Route path="/employee" element={<AdminDashboard />}/>
+                <Route path="/employee/master" element={<EmployeeMaster />}/>
+                <Route path="/employee/ward-master" element={<WardMasterAdmin />}/>
+                <Route path="/employee/login" element={<AdminLogin />}/>
+                <Route path="/admin" element={<Navigate to="/employee" replace />}/>
+                <Route path="/admin/ward-master" element={<Navigate to="/employee/ward-master" replace />}/>
+                <Route path="/admin/login" element={<Navigate to="/employee/login" replace />}/>
                 <Route path="/profile" element={<Profile />}/>
                 <Route path="/my-reports" element={<MyReports />}/>
                 <Route path="*" element={<NotFound />}/>

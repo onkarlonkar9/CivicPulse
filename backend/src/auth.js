@@ -71,6 +71,23 @@ export async function requireAdmin(req, res, next) {
     next();
 }
 
+export async function requireStaff(req, res, next) {
+    const user = await getUserFromRequest(req);
+
+    if (!user) {
+        res.status(401).json({ message: 'Authentication required' });
+        return;
+    }
+
+    if (!['employee', 'admin', 'super-admin'].includes(user.role)) {
+        res.status(403).json({ message: 'Staff access required' });
+        return;
+    }
+
+    req.user = user;
+    next();
+}
+
 export async function requireSuperAdmin(req, res, next) {
     const user = await getUserFromRequest(req);
 
@@ -97,9 +114,18 @@ export function toPublicUser(user) {
         id: user.id,
         name: user.name,
         phone: user.phone,
+        email: user.email || null,
         role: user.role,
         wardId: user.wardId,
         wardName: user.wardName,
+        area: user.area || null,
+        address: user.address || null,
+        pincode: user.pincode || null,
+        employeeCode: user.employeeCode || null,
+        designation: user.designation || null,
+        assignedWardIds: user.assignedWardIds || [],
+        taskCategories: user.taskCategories || [],
+        active: typeof user.active === 'boolean' ? user.active : true,
         createdAt: user.createdAt,
     };
 }

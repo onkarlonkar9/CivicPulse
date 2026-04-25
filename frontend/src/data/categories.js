@@ -11,4 +11,5 @@ export const categories = [
     { id: 'safety', translationKey: 'cat.safety', icon: 'ShieldAlert', department: 'Disaster Mgmt', slaHours: 12 },
     { id: 'illegal', translationKey: 'cat.illegal', icon: 'Building2', department: 'Building Permission', slaHours: 120 },
     { id: 'flood', translationKey: 'cat.flood', icon: 'CloudRain', department: 'Drainage + Roads', slaHours: 6 },
+    { id: 'other', translationKey: 'cat.other', icon: 'CircleAlert', department: 'General Civic Support', slaHours: 120 },
 ];

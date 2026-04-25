@@ -47,7 +47,8 @@ export const AuthProvider = ({ children }) => {
         user,
         loading,
         isAuthenticated: Boolean(user),
-        isAdmin: ['admin', 'super-admin'].includes(user?.role),
+        isAdmin: ['employee', 'admin', 'super-admin'].includes(user?.role),
+        isEmployee: user?.role === 'employee',
         isSuperAdmin: user?.role === 'super-admin',
         setSession(response) {
             localStorage.setItem('civicpulse_token', response.token);

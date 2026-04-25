@@ -22,6 +22,10 @@ function generateInviteCode() {
     return `ADM-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
+function normalizeEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
 export async function createOtpChallenge({ phone, purpose, payload }) {
     const otpCodes = await readOtpCodes();
     const normalizedPhone = normalizePhone(phone);
@@ -58,7 +62,13 @@ export async function consumeOtpChallenge({ phone, purpose, otp }) {
 
 export async function createCitizenFromOtp(otpEntry) {
     const users = await readUsers();
-    const existingUser = users.find((user) => phonesMatch(user.phone, otpEntry.phone));
+    const identifier = otpEntry.payload.email ? normalizeEmail(otpEntry.payload.email) : normalizePhone(otpEntry.phone);
+    const isEmail = identifier.includes('@');
+    const existingUser = users.find((user) => (
+        isEmail
+            ? normalizeEmail(user.email) === identifier
+            : phonesMatch(user.phone, identifier)
+    ));
 
     if (existingUser) {
         throw new Error('Phone number is already registered');
@@ -67,11 +77,15 @@ export async function createCitizenFromOtp(otpEntry) {
     const user = {
         id: `user-${randomUUID()}`,
         name: otpEntry.payload.name,
-        phone: normalizePhone(otpEntry.phone),
+        phone: otpEntry.payload.phone ? normalizePhone(otpEntry.payload.phone) : (isEmail ? null : normalizePhone(otpEntry.phone)),
+        email: otpEntry.payload.email ? normalizeEmail(otpEntry.payload.email) : (isEmail ? normalizeEmail(otpEntry.phone) : null),
         passwordHash: await hashPassword(otpEntry.payload.password),
         role: 'citizen',
-        wardId: null,
-        wardName: null,
+        wardId: otpEntry.payload.wardId || null,
+        wardName: otpEntry.payload.wardName || null,
+        area: otpEntry.payload.area || null,
+        address: otpEntry.payload.address || null,
+        pincode: otpEntry.payload.pincode || null,
         createdAt: nowIso(),
     };
 

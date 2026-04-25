@@ -406,7 +406,7 @@ const ReportIssue = () => {
                     {step === 2 && (
                         <div className="space-y-4">
                             <h3 className="font-semibold">{t('report.selectCat')}</h3>
-                            <CategoryPicker selected={category} onSelect={setCategory} options={categoryOptions} allowCustom />
+                            <CategoryPicker selected={category} onSelect={setCategory} options={categoryOptions} />
                         </div>
                     )}
 

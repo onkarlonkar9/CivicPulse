@@ -50,6 +50,7 @@ const IssueFeed = () => {
                 const response = await fetchIssues({
                     status: statusFilter,
                     category: catFilter,
+                    acknowledgedOnly: true,
                 });
 
                 if (isMounted) {

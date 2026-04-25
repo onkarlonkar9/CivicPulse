@@ -7,6 +7,7 @@ export const translations = {
     'nav.leaderboard': entry('Ward Leaderboard', 'वॉर्ड लीडरबोर्ड'),
     'nav.profile': entry('Profile', 'प्रोफाइल'),
     'nav.admin': entry('Admin', 'प्रशासन'),
+    'nav.employee': entry('Employee', 'कर्मचारी'),
     'nav.issues': entry('Issues', 'समस्या'),
 
     'landing.title': entry('CivicPulse City', 'CivicPulse City'),
@@ -82,6 +83,7 @@ export const translations = {
     'cat.safety': entry('Public Safety Hazard', 'सार्वजनिक सुरक्षेचा धोका'),
     'cat.illegal': entry('Illegal Construction', 'बेकायदेशीर बांधकाम'),
     'cat.flood': entry('Waterlogging / Flooding', 'पाणी तुंबणे / पूर'),
+    'cat.other': entry('Other Category', 'इतर श्रेणी'),
 
     'status.new': entry('New - Filed', 'नवीन - नोंदवले'),
     'status.ack': entry('Acknowledged', 'स्वीकारले'),

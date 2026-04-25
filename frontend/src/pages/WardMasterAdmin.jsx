@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.jsx';
+import { Badge } from '@/components/ui/badge.jsx';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
+import { Database, Download, Plus, RefreshCw, Save, Search, Upload } from 'lucide-react';
 import { fetchWardMaster, syncWardMasterFromUrl, updateWardMaster } from '@/lib/api.js';
 
 function toCsvNumbers(values) {
@@ -171,6 +173,14 @@ export default function WardMasterAdmin() {
         });
     }, [wards, duplicateIdSet]);
 
+    const averageCompleteness = useMemo(() => {
+        if (!wards.length) {
+            return 0;
+        }
+        const total = wards.reduce((sum, ward) => sum + wardCompletenessScore(ward), 0);
+        return Math.round(total / wards.length);
+    }, [wards]);
+
     const updateWard = (wardId, key, value) => {
         setWards((current) => current.map((ward) => (
             ward.id === wardId
@@ -274,11 +284,11 @@ export default function WardMasterAdmin() {
     if (!isAuthenticated) {
         return (
             <div className="mx-auto max-w-4xl px-4 py-8">
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardContent className="space-y-3 p-6 text-center">
                         <h1 className="text-2xl font-bold">Ward Master</h1>
                         <p className="text-sm text-muted-foreground">Please sign in as admin to manage ward master data.</p>
-                        <Button asChild><Link to="/admin/login">Go to admin login</Link></Button>
+                        <Button asChild><Link to="/employee/login">Go to employee login</Link></Button>
                     </CardContent>
                 </Card>
             </div>
@@ -288,7 +298,7 @@ export default function WardMasterAdmin() {
     if (!isAdmin) {
         return (
             <div className="mx-auto max-w-4xl px-4 py-8">
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardContent className="space-y-3 p-6 text-center">
                         <h1 className="text-2xl font-bold">Ward Master</h1>
                         <p className="text-sm text-destructive">Admin access required.</p>
@@ -299,20 +309,42 @@ export default function WardMasterAdmin() {
     }
 
     return (
-        <div className="mx-auto max-w-7xl px-4 py-6 md:py-8">
-            <div className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:py-8">
+            <section className="rounded-2xl border bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-800 p-5 text-white">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-wide text-cyan-100">
+                            <Database className="h-3.5 w-3.5" />
+                            Data Authority
+                        </div>
+                        <h1 className="text-2xl font-bold">Ward Master</h1>
+                        <p className="text-sm text-cyan-100">Single source of truth for ward detection, routing, and analytics.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2">
+                            <p className="text-xl font-bold">{wards.length}</p>
+                            <p className="text-xs text-cyan-100">Total Wards</p>
+                        </div>
+                        <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2">
+                            <p className="text-xl font-bold">{averageCompleteness}%</p>
+                            <p className="text-xs text-cyan-100">Avg Completeness</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">Ward Master</h1>
-                    <p className="text-sm text-muted-foreground">Single source of truth for ward detection, reporting, and analytics.</p>
+                    <p className="text-sm text-muted-foreground">Manage import/export, sync operations, and granular ward details.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="outline"><Link to="/admin">Back to Admin</Link></Button>
-                    <Button onClick={exportJson} variant="outline" disabled={loading}>Export JSON</Button>
-                    <Button onClick={() => fileInputRef.current?.click()} variant="outline" disabled={loading}>Import JSON</Button>
-                    <Button onClick={addWard} variant="outline" disabled={loading}>Add Ward</Button>
-                    <Button onClick={save} disabled={!canSave || saving || loading}>{saving ? 'Saving...' : 'Save Ward Master'}</Button>
+                    <Button asChild variant="outline"><Link to="/employee">Back to Employee Workspace</Link></Button>
+                    <Button onClick={exportJson} variant="outline" disabled={loading}><Download className="mr-1 h-4 w-4" />Export</Button>
+                    <Button onClick={() => fileInputRef.current?.click()} variant="outline" disabled={loading}><Upload className="mr-1 h-4 w-4" />Import</Button>
+                    <Button onClick={addWard} variant="outline" disabled={loading}><Plus className="mr-1 h-4 w-4" />Add Ward</Button>
+                    <Button onClick={save} disabled={!canSave || saving || loading}><Save className="mr-1 h-4 w-4" />{saving ? 'Saving...' : 'Save Changes'}</Button>
                 </div>
-            </div>
+            </section>
 
             <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={importJson} />
 
@@ -324,8 +356,8 @@ export default function WardMasterAdmin() {
 
             {!loading ? (
                 <>
-                    <Card className="mb-4 md:mb-6">
-                        <CardContent className="space-y-3 p-4">
+                    <Card className="border-0 shadow-sm">
+                        <CardContent className="space-y-4 p-5">
                             <div className="grid gap-3 md:grid-cols-3">
                                 <Input value={wardDataSource.source} onChange={(event) => setWardDataSource((current) => ({ ...current, source: event.target.value }))} placeholder="Source name" />
                                 <Input value={wardDataSource.url} onChange={(event) => setWardDataSource((current) => ({ ...current, url: event.target.value }))} placeholder="Source URL" />
@@ -334,15 +366,18 @@ export default function WardMasterAdmin() {
                             <Textarea value={wardDataSource.notes} onChange={(event) => setWardDataSource((current) => ({ ...current, notes: event.target.value }))} placeholder="Verification notes" rows={2} />
                             <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                                 <Input value={syncUrl} onChange={(event) => setSyncUrl(event.target.value)} placeholder="Open-source URL (JSON or GeoJSON)" />
-                                <Button onClick={syncFromUrl} disabled={syncing || !String(syncUrl).trim()}>{syncing ? 'Syncing...' : 'Sync From URL'}</Button>
+                                <Button onClick={syncFromUrl} disabled={syncing || !String(syncUrl).trim()}><RefreshCw className="mr-1 h-4 w-4" />{syncing ? 'Syncing...' : 'Sync From URL'}</Button>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="mb-4">
-                        <CardContent className="p-4">
+                    <Card className="border-0 shadow-sm">
+                        <CardContent className="p-5">
                             <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
-                                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ward by id, name, office, address" />
+                                <div className="relative">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ward by id, name, office, address" />
+                                </div>
                                 <div className="rounded-md border bg-muted px-3 py-2 text-sm">Total: {wards.length}</div>
                                 <div className="rounded-md border bg-muted px-3 py-2 text-sm">Visible: {filteredWards.length}</div>
                             </div>
@@ -351,11 +386,14 @@ export default function WardMasterAdmin() {
 
                     <div className="space-y-3 md:space-y-4">
                         {filteredWards.map((ward) => (
-                            <details key={`${ward.id}-${ward.nameEn}`} className="rounded-lg border bg-card open:shadow-sm" open>
+                            <details key={`${ward.id}-${ward.nameEn}`} className="rounded-xl border bg-card shadow-sm open:shadow-md" open>
                                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
                                     <div>
                                         <p className="font-semibold">{ward.nameEn || 'Unnamed Ward'} ({ward.id || '-'})</p>
-                                        <p className="text-xs text-muted-foreground">Completeness: {wardCompletenessScore(ward)}%</p>
+                                        <div className="mt-1 flex items-center gap-2">
+                                            <Badge variant="outline">Completeness {wardCompletenessScore(ward)}%</Badge>
+                                            {duplicateIdSet.has(Number(ward.id)) ? <Badge variant="secondary">Duplicate ID</Badge> : null}
+                                        </div>
                                     </div>
                                     <Button type="button" variant="outline" size="sm" onClick={(event) => { event.preventDefault(); removeWard(ward.id); }}>Delete</Button>
                                 </summary>

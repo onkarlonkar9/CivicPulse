@@ -18,7 +18,7 @@ const Navbar = () => {
         { to: '/report', label: t('nav.report'), icon: FileWarning },
         { to: '/issues', label: t('nav.issues'), icon: ListChecks },
         { to: '/leaderboard', label: t('nav.leaderboard'), icon: Trophy },
-        ...(isAdmin ? [{ to: '/admin', label: t('nav.admin'), icon: Shield }] : []),
+        ...(isAdmin ? [{ to: '/employee', label: t('nav.employee'), icon: Shield }] : []),
         { to: '/profile', label: t('nav.profile'), icon: User },
     ];
 
@@ -27,13 +27,13 @@ const Navbar = () => {
         { to: '/issues', label: t('nav.issues'), icon: ListChecks },
         { to: '/', label: t('nav.home'), icon: Home, emphasize: true },
         { to: '/leaderboard', label: t('nav.leaderboard'), icon: Trophy },
-        { to: isAdmin ? '/admin' : '/profile', label: isAdmin ? t('nav.admin') : t('nav.profile'), icon: isAdmin ? Shield : User },
+        { to: isAdmin ? '/employee' : '/profile', label: isAdmin ? t('nav.employee') : t('nav.profile'), icon: isAdmin ? Shield : User },
     ];
 
     const isPathActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
     const isTabActive = (to) => {
-        if (to === '/profile' || to === '/admin') {
-            return location.pathname.startsWith('/profile') || location.pathname.startsWith('/admin');
+        if (to === '/profile' || to === '/employee') {
+            return location.pathname.startsWith('/profile') || location.pathname.startsWith('/employee') || location.pathname.startsWith('/admin');
         }
 
         return isPathActive(to);

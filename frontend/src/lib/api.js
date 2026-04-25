@@ -15,7 +15,7 @@ function normalizePhone(phone) {
 }
 
 function withNormalizedPhone(body) {
-    if (!body || typeof body !== 'object' || !('phone' in body)) {
+    if (!body || typeof body !== 'object') {
         return body;
     }
 
@@ -37,10 +37,20 @@ function withNormalizedPhone(body) {
         normalizedBody.name = normalizedBody.name.trim();
     }
 
-    return {
-        ...normalizedBody,
-        phone: normalizePhone(normalizedBody.phone),
-    };
+    if (typeof normalizedBody.identifier === 'string') {
+        const identifier = normalizedBody.identifier.trim();
+        normalizedBody.identifier = identifier.includes('@') ? identifier.toLowerCase() : normalizePhone(identifier);
+    }
+
+    if (typeof normalizedBody.email === 'string') {
+        normalizedBody.email = normalizedBody.email.trim().toLowerCase();
+    }
+
+    if (typeof normalizedBody.phone === 'string') {
+        normalizedBody.phone = normalizePhone(normalizedBody.phone);
+    }
+
+    return normalizedBody;
 }
 
 function getToken() {
@@ -72,7 +82,7 @@ async function parseResponse(response) {
     return payload;
 }
 
-export async function fetchIssues({ status = 'all', category = 'all' } = {}) {
+export async function fetchIssues({ status = 'all', category = 'all', acknowledgedOnly = false } = {}) {
     const query = new URLSearchParams();
 
     if (status && status !== 'all') {
@@ -83,13 +93,21 @@ export async function fetchIssues({ status = 'all', category = 'all' } = {}) {
         query.set('category', category);
     }
 
+    if (acknowledgedOnly) {
+        query.set('acknowledgedOnly', 'true');
+    }
+
     const suffix = query.toString() ? `?${query}` : '';
-    const response = await fetch(`${API_BASE_URL}/issues${suffix}`);
+    const response = await fetch(`${API_BASE_URL}/issues${suffix}`, {
+        headers: withAuthHeaders(),
+    });
     return parseResponse(response);
 }
 
 export async function fetchIssueById(id) {
-    const response = await fetch(`${API_BASE_URL}/issues/${id}`);
+    const response = await fetch(`${API_BASE_URL}/issues/${id}`, {
+        headers: withAuthHeaders(),
+    });
     return parseResponse(response);
 }
 
@@ -187,18 +205,6 @@ export async function register(body) {
     return parseResponse(response);
 }
 
-export async function registerAdmin(body) {
-    const response = await fetch(`${API_BASE_URL}/auth/admin/register`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(withNormalizedPhone(body)),
-    });
-
-    return parseResponse(response);
-}
-
 export async function requestCitizenRegisterOtp(body) {
     const response = await fetch(`${API_BASE_URL}/auth/citizen/request-register-otp`, {
         method: 'POST',
@@ -247,20 +253,33 @@ export async function verifyCitizenLoginOtp(body) {
     return parseResponse(response);
 }
 
-export async function fetchAdminInvites() {
-    const response = await fetch(`${API_BASE_URL}/admin/invites`, {
+export async function fetchEmployees() {
+    const response = await fetch(`${API_BASE_URL}/admin/employees`, {
         headers: withAuthHeaders(),
     });
 
     return parseResponse(response);
 }
 
-export async function createAdminInvite() {
-    const response = await fetch(`${API_BASE_URL}/admin/invites`, {
+export async function createEmployee(payload) {
+    const response = await fetch(`${API_BASE_URL}/admin/employees`, {
         method: 'POST',
-        headers: withAuthHeaders(),
+        headers: withAuthHeaders({
+            'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify(withNormalizedPhone(payload)),
     });
+    return parseResponse(response);
+}
 
+export async function updateEmployee(id, payload) {
+    const response = await fetch(`${API_BASE_URL}/admin/employees/${id}`, {
+        method: 'PATCH',
+        headers: withAuthHeaders({
+            'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify(payload),
+    });
     return parseResponse(response);
 }
 

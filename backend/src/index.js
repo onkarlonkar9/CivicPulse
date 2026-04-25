@@ -6,8 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { categories } from '../../frontend/src/data/categories.js';
 import { config } from './config.js';
-import { comparePassword, getUserFromRequest, hashPassword, requireAdmin, requireAuth, requireSuperAdmin, signToken, toPublicUser } from './auth.js';
-import { consumeAdminInvite, consumeOtpChallenge, createAdminInvite, createCitizenFromOtp, createOtpChallenge, listActiveAdminInvites } from './authFlows.js';
+import { comparePassword, getUserFromRequest, hashPassword, requireAdmin, requireAuth, requireStaff, requireSuperAdmin, signToken, toPublicUser } from './auth.js';
+import { consumeOtpChallenge, createCitizenFromOtp, createOtpChallenge } from './authFlows.js';
 import { categoryMap as seededCategoryMap } from './seed.js';
 import { buildCityIssueStats, buildWardAnalytics } from './wardAnalytics.js';
 import { normalizePhone, phonesMatch } from './phone.js';
@@ -35,32 +35,72 @@ const upload = multer({
 });
 
 const phoneSchema = z.coerce.string().trim().min(10).max(20).transform(normalizePhone);
-const passwordSchema = z.coerce.string().min(6).max(100);
+const emailSchema = z.coerce.string().trim().email().transform((value) => value.toLowerCase());
+const loginPasswordSchema = z.coerce.string().trim().min(8).max(128);
+const passwordSchema = z.coerce.string().trim().min(12).max(128)
+    .regex(/[a-z]/, 'Password must include at least one lowercase letter')
+    .regex(/[A-Z]/, 'Password must include at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must include at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Password must include at least one special character');
 const nameSchema = z.coerce.string().trim().min(2).max(80);
 
-const authSchema = z.object({
-    phone: phoneSchema,
-    password: passwordSchema,
+const loginIdentifierSchema = z.object({
+    identifier: z.coerce.string().trim().min(3).max(100),
+    password: loginPasswordSchema,
 });
 
-const registerSchema = authSchema.extend({
-    name: nameSchema,
-    wardId: z.coerce.number().optional(),
+const citizenProfileSchema = z.object({
+    wardId: z.coerce.number().int().positive().optional(),
     wardName: z.coerce.string().trim().max(120).optional(),
+    area: z.coerce.string().trim().min(2).max(120).optional(),
+    address: z.coerce.string().trim().min(6).max(240).optional(),
+    pincode: z.coerce.string().trim().regex(/^\d{6}$/).optional(),
 });
 
-const adminRegisterSchema = authSchema.extend({
+const registerSchema = z.object({
     name: nameSchema,
-    inviteCode: z.coerce.string().trim().min(6).max(40),
-});
-
-const citizenRegisterRequestSchema = authSchema.extend({
-    name: nameSchema,
+    password: passwordSchema,
+    phone: phoneSchema.optional(),
+    email: emailSchema.optional(),
+}).merge(citizenProfileSchema).superRefine((value, context) => {
+    if (!value.phone && !value.email) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['identifier'],
+            message: 'Phone or email is required',
+        });
+    }
 });
 
 const otpVerifySchema = z.object({
-    phone: phoneSchema,
+    identifier: z.coerce.string().trim().min(3).max(100),
     otp: z.coerce.string().trim().length(6),
+});
+
+const createEmployeeSchema = z.object({
+    name: nameSchema,
+    email: emailSchema.optional(),
+    phone: phoneSchema.optional(),
+    password: passwordSchema,
+    employeeCode: z.coerce.string().trim().min(4).max(20).regex(/^[A-Za-z0-9-]+$/),
+    designation: z.coerce.string().trim().min(2).max(80),
+    assignedWardIds: z.array(z.coerce.number().int().positive()).min(1),
+    taskCategories: z.array(z.coerce.string().trim().min(1)).min(1),
+}).superRefine((value, context) => {
+    if (!value.phone && !value.email) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['email'],
+            message: 'Phone or email is required',
+        });
+    }
+});
+
+const updateEmployeeSchema = z.object({
+    designation: z.coerce.string().trim().min(2).max(80).optional(),
+    assignedWardIds: z.array(z.coerce.number().int().positive()).min(1).optional(),
+    taskCategories: z.array(z.coerce.string().trim().min(1)).min(1).optional(),
+    active: z.boolean().optional(),
 });
 
 const statusSchema = z.object({
@@ -145,6 +185,64 @@ function sortTimeline(issue) {
     };
 }
 
+function normalizeEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
+function isEmailIdentifier(value) {
+    return String(value || '').includes('@');
+}
+
+function normalizeIdentifier(identifier) {
+    const normalized = String(identifier || '').trim();
+    return isEmailIdentifier(normalized) ? normalizeEmail(normalized) : normalizePhone(normalized);
+}
+
+function identifiersMatch(user, identifier) {
+    if (!user || !identifier) {
+        return false;
+    }
+
+    if (isEmailIdentifier(identifier)) {
+        return normalizeEmail(user.email) === normalizeEmail(identifier);
+    }
+
+    return phonesMatch(user.phone, identifier);
+}
+
+function hasCitizenContact(value) {
+    return Boolean(value?.phone) || Boolean(value?.email);
+}
+
+function canEmployeeHandleIssue(user, issue) {
+    if (!user || user.role !== 'employee') {
+        return false;
+    }
+
+    const assignedWardIds = Array.isArray(user.assignedWardIds) ? user.assignedWardIds : [];
+    const taskCategories = Array.isArray(user.taskCategories) ? user.taskCategories : [];
+    const wardAllowed = assignedWardIds.includes(issue.wardId);
+    const categoryAllowed = taskCategories.length === 0 || taskCategories.includes(issue.category);
+    return wardAllowed && categoryAllowed;
+}
+
+function isIssueAcknowledgedByAssignedEmployee(issue) {
+    const hasExplicitAcknowledgment = Boolean(
+        issue?.acknowledgedByEmployeeId
+        && issue?.acknowledgedByWardId
+        && Number(issue.acknowledgedByWardId) === Number(issue.wardId)
+    );
+
+    if (hasExplicitAcknowledgment) {
+        return true;
+    }
+
+    // Backward compatibility: older records may not have acknowledgment metadata.
+    // In those cases, any status after "new" implies staff has already picked it up.
+    const status = String(issue?.status || '').toLowerCase();
+    return ['ack', 'inprog', 'resolved', 'verified', 'closed', 'reopened', 'escalated'].includes(status);
+}
+
 async function validatePasswordAndUpgrade(user, users, candidatePassword) {
     if (!user) {
         return false;
@@ -196,7 +294,7 @@ function sortUsersByRecency(users) {
 
 async function findUserByCredentials({ users, phone, password, roles }) {
     const candidates = sortUsersByRecency(
-        users.filter((entry) => phonesMatch(entry.phone, phone))
+        users.filter((entry) => identifiersMatch(entry, phone))
     ).filter((entry) => !roles || roles.includes(entry.role));
 
     for (const candidate of candidates) {
@@ -237,22 +335,34 @@ app.post('/api/auth/register', async (req, res) => {
         return;
     }
 
+    if (!hasCitizenContact(parsed.data)) {
+        res.status(400).json({ message: 'Phone or email is required' });
+        return;
+    }
+
     const users = await readUsers();
-    const existingUser = users.find((user) => phonesMatch(user.phone, parsed.data.phone));
+    const existingUser = users.find((user) => (
+        (parsed.data.phone && phonesMatch(user.phone, parsed.data.phone))
+        || (parsed.data.email && normalizeEmail(user.email) === normalizeEmail(parsed.data.email))
+    ));
 
     if (existingUser) {
-        res.status(409).json({ message: 'Phone number is already registered' });
+        res.status(409).json({ message: 'Phone or email is already registered' });
         return;
     }
 
     const user = {
         id: `user-${randomUUID()}`,
         name: parsed.data.name,
-        phone: normalizePhone(parsed.data.phone),
+        phone: parsed.data.phone ? normalizePhone(parsed.data.phone) : null,
+        email: parsed.data.email ? normalizeEmail(parsed.data.email) : null,
         passwordHash: await hashPassword(parsed.data.password),
         role: 'citizen',
         wardId: parsed.data.wardId || null,
         wardName: parsed.data.wardName || null,
+        area: parsed.data.area || null,
+        address: parsed.data.address || null,
+        pincode: parsed.data.pincode || null,
         createdAt: new Date().toISOString(),
     };
 
@@ -266,44 +376,65 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/citizen/request-register-otp', async (req, res) => {
-    const parsed = citizenRegisterRequestSchema.safeParse(req.body);
+    const parsed = registerSchema.safeParse(req.body);
 
     if (!parsed.success) {
         res.status(400).json({ message: 'Invalid citizen registration payload', errors: parsed.error.flatten() });
         return;
     }
 
-    const users = await readUsers();
-    const existingUser = users.find((user) => phonesMatch(user.phone, parsed.data.phone));
-
-    if (existingUser) {
-        res.status(409).json({ message: 'Phone number is already registered' });
+    if (!hasCitizenContact(parsed.data)) {
+        res.status(400).json({ message: 'Phone or email is required' });
         return;
     }
 
+    const users = await readUsers();
+    const existingUser = users.find((user) => (
+        (parsed.data.phone && phonesMatch(user.phone, parsed.data.phone))
+        || (parsed.data.email && normalizeEmail(user.email) === normalizeEmail(parsed.data.email))
+    ));
+
+    if (existingUser) {
+        res.status(409).json({ message: 'Phone or email is already registered' });
+        return;
+    }
+
+    const normalizedIdentifier = parsed.data.email
+        ? normalizeEmail(parsed.data.email)
+        : normalizePhone(parsed.data.phone);
+
     const otp = await createOtpChallenge({
-        phone: normalizePhone(parsed.data.phone),
+        phone: normalizedIdentifier,
         purpose: 'citizen-register',
         payload: {
             name: parsed.data.name,
             password: parsed.data.password,
+            phone: parsed.data.phone ? normalizePhone(parsed.data.phone) : null,
+            email: parsed.data.email ? normalizeEmail(parsed.data.email) : null,
+            wardId: parsed.data.wardId || null,
+            wardName: parsed.data.wardName || null,
+            area: parsed.data.area || null,
+            address: parsed.data.address || null,
+            pincode: parsed.data.pincode || null,
         },
     });
 
-    try {
-        await sendWhatsappOtp({
-            phone: parsed.data.phone,
-            otp,
-        });
-    } catch (error) {
-        res.status(502).json({ message: `Failed to send WhatsApp OTP: ${error.message}` });
-        return;
+    if (parsed.data.phone) {
+        try {
+            await sendWhatsappOtp({
+                phone: parsed.data.phone,
+                otp,
+            });
+        } catch (error) {
+            res.status(502).json({ message: `Failed to send WhatsApp OTP: ${error.message}` });
+            return;
+        }
     }
 
     res.json(
         config.otp.exposeDevOtp
-            ? { message: 'OTP sent on WhatsApp for citizen registration', devOtp: otp }
-            : { message: 'OTP sent on WhatsApp for citizen registration' }
+            ? { message: parsed.data.phone ? 'OTP sent on WhatsApp for citizen registration' : 'OTP generated for citizen email registration', devOtp: otp }
+            : { message: parsed.data.phone ? 'OTP sent on WhatsApp for citizen registration' : 'OTP generated for citizen email registration' }
     );
 });
 
@@ -316,7 +447,7 @@ app.post('/api/auth/citizen/verify-register-otp', async (req, res) => {
     }
 
     const otpEntry = await consumeOtpChallenge({
-        phone: parsed.data.phone,
+        phone: normalizeIdentifier(parsed.data.identifier),
         purpose: 'citizen-register',
         otp: parsed.data.otp,
     });
@@ -338,7 +469,7 @@ app.post('/api/auth/citizen/verify-register-otp', async (req, res) => {
 });
 
 app.post('/api/auth/citizen/request-login-otp', async (req, res) => {
-    const parsed = authSchema.safeParse(req.body);
+    const parsed = loginIdentifierSchema.safeParse(req.body);
 
     if (!parsed.success) {
         res.status(400).json({ message: 'Invalid login payload', errors: parsed.error.flatten() });
@@ -348,36 +479,38 @@ app.post('/api/auth/citizen/request-login-otp', async (req, res) => {
     const users = await readUsers();
     const user = await findUserByCredentials({
         users,
-        phone: parsed.data.phone,
+        phone: parsed.data.identifier,
         password: parsed.data.password,
         roles: ['citizen'],
     });
 
     if (!user) {
-        res.status(401).json({ message: 'Invalid phone or password' });
+        res.status(401).json({ message: 'Invalid login credentials' });
         return;
     }
 
     const otp = await createOtpChallenge({
-        phone: normalizePhone(parsed.data.phone),
+        phone: normalizeEmail(user.email) || normalizePhone(user.phone),
         purpose: 'citizen-login',
         payload: { userId: user.id },
     });
 
-    try {
-        await sendWhatsappOtp({
-            phone: parsed.data.phone,
-            otp,
-        });
-    } catch (error) {
-        res.status(502).json({ message: `Failed to send WhatsApp OTP: ${error.message}` });
-        return;
+    if (user.phone) {
+        try {
+            await sendWhatsappOtp({
+                phone: user.phone,
+                otp,
+            });
+        } catch (error) {
+            res.status(502).json({ message: `Failed to send WhatsApp OTP: ${error.message}` });
+            return;
+        }
     }
 
     res.json(
         config.otp.exposeDevOtp
-            ? { message: 'OTP sent on WhatsApp for citizen login', devOtp: otp }
-            : { message: 'OTP sent on WhatsApp for citizen login' }
+            ? { message: user.phone ? 'OTP sent on WhatsApp for citizen login' : 'OTP generated for citizen email login', devOtp: otp }
+            : { message: user.phone ? 'OTP sent on WhatsApp for citizen login' : 'OTP generated for citizen email login' }
     );
 });
 
@@ -390,7 +523,7 @@ app.post('/api/auth/citizen/verify-login-otp', async (req, res) => {
     }
 
     const otpEntry = await consumeOtpChallenge({
-        phone: parsed.data.phone,
+        phone: normalizeIdentifier(parsed.data.identifier),
         purpose: 'citizen-login',
         otp: parsed.data.otp,
     });
@@ -401,7 +534,10 @@ app.post('/api/auth/citizen/verify-login-otp', async (req, res) => {
     }
 
     const users = await readUsers();
-    const user = users.find((entry) => entry.id === otpEntry.payload.userId && phonesMatch(entry.phone, parsed.data.phone));
+    const user = users.find((entry) => (
+        entry.id === otpEntry.payload.userId
+        && identifiersMatch(entry, parsed.data.identifier)
+    ));
 
     if (!user) {
         res.status(404).json({ message: 'User not found' });
@@ -414,51 +550,8 @@ app.post('/api/auth/citizen/verify-login-otp', async (req, res) => {
     });
 });
 
-app.post('/api/auth/admin/register', async (req, res) => {
-    const parsed = adminRegisterSchema.safeParse(req.body);
-
-    if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid admin registration payload', errors: parsed.error.flatten() });
-        return;
-    }
-
-    const users = await readUsers();
-    const existingUser = users.find((user) => phonesMatch(user.phone, parsed.data.phone));
-
-    if (existingUser) {
-        res.status(409).json({ message: 'Phone number is already registered' });
-        return;
-    }
-
-    const invite = await consumeAdminInvite(parsed.data.inviteCode, normalizePhone(parsed.data.phone));
-
-    if (!invite) {
-        res.status(403).json({ message: 'Invalid or expired admin invite code' });
-        return;
-    }
-
-    const user = {
-        id: `user-${randomUUID()}`,
-        name: parsed.data.name,
-        phone: normalizePhone(parsed.data.phone),
-        passwordHash: await hashPassword(parsed.data.password),
-        role: 'admin',
-        wardId: null,
-        wardName: null,
-        createdAt: new Date().toISOString(),
-    };
-
-    users.unshift(user);
-    await writeUsers(users);
-
-    res.status(201).json({
-        token: signToken(user),
-        user: toPublicUser(user),
-    });
-});
-
 app.post('/api/auth/login', async (req, res) => {
-    const parsed = authSchema.safeParse(req.body);
+    const parsed = loginIdentifierSchema.safeParse(req.body);
 
     if (!parsed.success) {
         res.status(400).json({ message: 'Invalid login payload', errors: parsed.error.flatten() });
@@ -468,18 +561,23 @@ app.post('/api/auth/login', async (req, res) => {
     const users = await readUsers();
     const user = await findUserByCredentials({
         users,
-        phone: parsed.data.phone,
+        phone: parsed.data.identifier,
         password: parsed.data.password,
-        roles: ['admin', 'super-admin'],
+        roles: ['employee', 'admin', 'super-admin'],
     });
 
     if (!user) {
-        res.status(401).json({ message: 'Invalid phone or password' });
+        res.status(401).json({ message: 'Invalid login credentials' });
         return;
     }
 
-    if (!['admin', 'super-admin'].includes(user.role)) {
+    if (!['employee', 'admin', 'super-admin'].includes(user.role)) {
         res.status(403).json({ message: 'Citizen accounts must use OTP login' });
+        return;
+    }
+
+    if (user.role === 'employee' && user.active === false) {
+        res.status(403).json({ message: 'Employee account is inactive' });
         return;
     }
 
@@ -495,10 +593,28 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 
 app.get('/api/issues', async (req, res) => {
     const issues = await readIssues();
+    const user = await getUserFromRequest(req);
     const status = req.query.status?.toString();
     const category = req.query.category?.toString();
+    const acknowledgedOnly = ['1', 'true', 'yes'].includes(String(req.query.acknowledgedOnly || '').toLowerCase());
+    const isStaffUser = ['employee', 'admin', 'super-admin'].includes(user?.role);
 
     const filteredIssues = issues
+        .filter((issue) => {
+            if (acknowledgedOnly && !isIssueAcknowledgedByAssignedEmployee(issue)) {
+                return false;
+            }
+
+            if (!isStaffUser) {
+                return isIssueAcknowledgedByAssignedEmployee(issue);
+            }
+
+            if (user?.role === 'employee') {
+                return canEmployeeHandleIssue(user, issue);
+            }
+
+            return true;
+        })
         .filter((issue) => !status || status === 'all' || issue.status === status)
         .filter((issue) => !category || category === 'all' || issue.category === category)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -515,10 +631,22 @@ app.get('/api/issues', async (req, res) => {
 
 app.get('/api/issues/:id', async (req, res) => {
     const issues = await readIssues();
+    const user = await getUserFromRequest(req);
     const issue = issues.find((entry) => entry.id === req.params.id);
 
     if (!issue) {
         res.status(404).json({ message: 'Issue not found' });
+        return;
+    }
+    const isStaffUser = ['employee', 'admin', 'super-admin'].includes(user?.role);
+
+    if (!isStaffUser && !isIssueAcknowledgedByAssignedEmployee(issue)) {
+        res.status(404).json({ message: 'Issue not found' });
+        return;
+    }
+
+    if (user?.role === 'employee' && !canEmployeeHandleIssue(user, issue)) {
+        res.status(403).json({ message: 'This issue is outside your assigned ward/tasks' });
         return;
     }
 
@@ -641,6 +769,9 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
                 note: 'Issue submitted by citizen',
             },
         ],
+        acknowledgedByEmployeeId: null,
+        acknowledgedByWardId: null,
+        acknowledgedAt: null,
         verification: null,
         source: user ? 'authenticated-user' : 'user',
     };
@@ -654,7 +785,7 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
     });
 });
 
-app.patch('/api/issues/:id/status', requireAdmin, async (req, res) => {
+app.patch('/api/issues/:id/status', requireStaff, async (req, res) => {
     const parsed = statusSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -672,10 +803,26 @@ app.patch('/api/issues/:id/status', requireAdmin, async (req, res) => {
 
     const now = new Date().toISOString();
     const currentIssue = issues[issueIndex];
+    const isEmployee = req.user.role === 'employee';
+    if (isEmployee && !canEmployeeHandleIssue(req.user, currentIssue)) {
+        res.status(403).json({ message: 'This issue is outside your assigned ward/tasks' });
+        return;
+    }
+
+    const acknowledgmentPatch = (
+        parsed.data.status === 'ack'
+            ? {
+                acknowledgedByEmployeeId: req.user.role === 'employee' ? req.user.id : currentIssue.acknowledgedByEmployeeId || null,
+                acknowledgedByWardId: req.user.role === 'employee' ? currentIssue.wardId : currentIssue.acknowledgedByWardId || null,
+                acknowledgedAt: req.user.role === 'employee' ? now : currentIssue.acknowledgedAt || null,
+            }
+            : {}
+    );
     const oldStatus = currentIssue.status;
     const updatedIssue = {
         ...currentIssue,
         status: parsed.data.status,
+        ...acknowledgmentPatch,
         updatedAt: now,
         timeline: [
             ...(currentIssue.timeline || []),
@@ -756,16 +903,114 @@ app.get('/api/users/me/issues', requireAuth, async (req, res) => {
     res.json({ issues: userIssues });
 });
 
-app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
+app.get('/api/admin/stats', requireStaff, async (req, res) => {
     const issues = await readIssues();
+    const visibleIssues = req.user.role === 'employee'
+        ? issues.filter((issue) => canEmployeeHandleIssue(req.user, issue))
+        : issues;
     res.json({
         stats: {
-            total: issues.length,
-            pending: issues.filter((issue) => ['new', 'ack'].includes(issue.status)).length,
-            resolved: issues.filter((issue) => issue.status === 'resolved').length,
-            escalated: issues.filter((issue) => issue.status === 'escalated').length,
+            total: visibleIssues.length,
+            pending: visibleIssues.filter((issue) => ['new', 'ack'].includes(issue.status)).length,
+            resolved: visibleIssues.filter((issue) => issue.status === 'resolved').length,
+            escalated: visibleIssues.filter((issue) => issue.status === 'escalated').length,
         },
     });
+});
+
+app.get('/api/admin/employees', requireAdmin, async (req, res) => {
+    const users = await readUsers();
+    const employees = users.filter((entry) => entry.role === 'employee');
+
+    if (req.user.role === 'super-admin' || req.user.role === 'admin') {
+        res.json({ employees: employees.map((entry) => toPublicUser(entry)) });
+        return;
+    }
+
+    res.json({ employees: [] });
+});
+
+app.post('/api/admin/employees', requireSuperAdmin, async (req, res) => {
+    const parsed = createEmployeeSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid employee payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const users = await readUsers();
+    const normalizedPhone = parsed.data.phone ? normalizePhone(parsed.data.phone) : null;
+    const normalizedEmail = parsed.data.email ? normalizeEmail(parsed.data.email) : null;
+    const existing = users.find((user) => (
+        (normalizedPhone && phonesMatch(user.phone, normalizedPhone))
+        || (normalizedEmail && normalizeEmail(user.email) === normalizedEmail)
+        || (user.employeeCode && user.employeeCode === parsed.data.employeeCode)
+    ));
+
+    if (existing) {
+        res.status(409).json({ message: 'Employee with same phone, email, or employee code already exists' });
+        return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const assignedWardIds = [...new Set(parsed.data.assignedWardIds)];
+    const employee = {
+        id: `user-${randomUUID()}`,
+        name: parsed.data.name,
+        phone: normalizedPhone,
+        email: normalizedEmail,
+        passwordHash: await hashPassword(parsed.data.password),
+        role: 'employee',
+        employeeCode: parsed.data.employeeCode.toUpperCase(),
+        designation: parsed.data.designation,
+        assignedWardIds,
+        wardId: assignedWardIds[0],
+        wardName: null,
+        taskCategories: [...new Set(parsed.data.taskCategories)],
+        active: true,
+        createdBy: req.user.id,
+        createdAt,
+        updatedAt: createdAt,
+    };
+
+    users.unshift(employee);
+    await writeUsers(users);
+
+    res.status(201).json({ employee: toPublicUser(employee) });
+});
+
+app.patch('/api/admin/employees/:id', requireSuperAdmin, async (req, res) => {
+    const parsed = updateEmployeeSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid employee update payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const users = await readUsers();
+    const employeeIndex = users.findIndex((entry) => entry.id === req.params.id && entry.role === 'employee');
+
+    if (employeeIndex === -1) {
+        res.status(404).json({ message: 'Employee not found' });
+        return;
+    }
+
+    const current = users[employeeIndex];
+    const assignedWardIds = parsed.data.assignedWardIds
+        ? [...new Set(parsed.data.assignedWardIds)]
+        : current.assignedWardIds;
+    const next = {
+        ...current,
+        ...(parsed.data.designation ? { designation: parsed.data.designation } : {}),
+        ...(parsed.data.taskCategories ? { taskCategories: [...new Set(parsed.data.taskCategories)] } : {}),
+        ...(typeof parsed.data.active === 'boolean' ? { active: parsed.data.active } : {}),
+        ...(assignedWardIds ? { assignedWardIds, wardId: assignedWardIds[0] } : {}),
+        updatedAt: new Date().toISOString(),
+    };
+
+    users[employeeIndex] = next;
+    await writeUsers(users);
+    res.json({ employee: toPublicUser(next) });
 });
 
 app.get('/api/notifications', requireAuth, async (req, res) => {
@@ -781,16 +1026,6 @@ app.get('/api/notifications/unread-count', requireAuth, async (req, res) => {
 app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     await markNotificationAsRead(req.params.id, req.user.id);
     res.json({ success: true });
-});
-
-app.get('/api/admin/invites', requireSuperAdmin, async (_req, res) => {
-    const invites = await listActiveAdminInvites();
-    res.json({ invites });
-});
-
-app.post('/api/admin/invites', requireSuperAdmin, async (req, res) => {
-    const invite = await createAdminInvite(req.user.phone);
-    res.status(201).json({ invite });
 });
 
 app.get('/api/analytics/wards', async (req, res) => {
@@ -830,6 +1065,7 @@ app.get('/api/dashboard/summary', async (req, res) => {
     const issues = await readIssues();
     const recentIssues = issues
         .slice()
+        .filter((issue) => isIssueAcknowledgedByAssignedEmployee(issue))
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 4)
         .map((issue) => toPublicIssue(sortTimeline(issue), baseUrlFor(req)));

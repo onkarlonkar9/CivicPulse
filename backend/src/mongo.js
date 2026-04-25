@@ -56,7 +56,45 @@ export async function ensureMongoIndexes() {
 
             await Promise.all([
                 users.createIndex({ id: 1 }, { unique: true }),
-                users.createIndex({ phone: 1 }, { unique: true }),
+                users.createIndex(
+                    { phone: 1 },
+                    {
+                        name: 'phone_1',
+                        unique: true,
+                        partialFilterExpression: {
+                            phone: {
+                                $exists: true,
+                                $type: 'string',
+                            },
+                        },
+                    }
+                ),
+                users.createIndex(
+                    { email: 1 },
+                    {
+                        name: 'email_1',
+                        unique: true,
+                        partialFilterExpression: {
+                            email: {
+                                $type: 'string',
+                                $gt: '',
+                            },
+                        },
+                    }
+                ),
+                users.createIndex(
+                    { employeeCode: 1 },
+                    {
+                        name: 'employeeCode_1',
+                        unique: true,
+                        partialFilterExpression: {
+                            employeeCode: {
+                                $exists: true,
+                                $type: 'string',
+                            },
+                        },
+                    }
+                ),
                 issues.createIndex({ id: 1 }, { unique: true }),
                 comments.createIndex({ id: 1 }, { unique: true }),
                 comments.createIndex({ issueId: 1, createdAt: -1 }),

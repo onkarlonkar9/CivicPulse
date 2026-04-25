@@ -1,8 +1,3 @@
-export function buildCustomCategoryId(label) {
-    const cleanLabel = String(label || '').trim();
-    return cleanLabel ? `custom:${cleanLabel}` : '';
-}
-
 export function getCategoryLabel(categoryId, t, options = []) {
     if (!categoryId) {
         return '-';
