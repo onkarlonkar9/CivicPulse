@@ -1,0 +1,303 @@
+[
+  {
+    "id": "CP-PNE-2026-000009",
+    "title": "Garden & Tree issue near Ghole Road",
+    "titleMr": "Garden & Tree issue near Ghole Road",
+    "description": "gardan issues",
+    "descriptionMr": "gardan issues",
+    "category": "park",
+    "status": "new",
+    "severity": "low",
+    "wardId": 2,
+    "wardName": "Ghole Road",
+    "wardNameMr": "Ghole Road",
+    "lat": 18.51107822784539,
+    "lng": 73.82589555116398,
+    "imageUrl": "/uploads/1775734647079-f3d45c5d-7c9e-4433-b919-41a4c02ed6a1.jpg",
+    "resolvedImageUrl": null,
+    "createdAt": "2026-04-09T11:37:27.109Z",
+    "updatedAt": "2026-04-09T11:37:27.109Z",
+    "anonymous": false,
+    "reporterName": "Citizen Reporter",
+    "reporterId": null,
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-09T11:37:27.109Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  },
+  {
+    "id": "CP-PNE-2026-000008",
+    "title": "Drainage & Sewage issue near Tilak Road",
+    "titleMr": "Drainage & Sewage issue near Tilak Road",
+    "description": "drainage water",
+    "descriptionMr": "drainage water",
+    "category": "drainage",
+    "status": "new",
+    "severity": "medium",
+    "wardId": 9,
+    "wardName": "Tilak Road",
+    "wardNameMr": "Tilak Road",
+    "lat": 18.50314251840115,
+    "lng": 73.83731132358216,
+    "imageUrl": "/uploads/1775733728381-5825aedb-0248-4e70-8ba7-4acf2a6b0e5c.jpg",
+    "resolvedImageUrl": null,
+    "createdAt": "2026-04-09T11:22:08.415Z",
+    "updatedAt": "2026-04-09T11:22:08.415Z",
+    "anonymous": false,
+    "reporterName": "onkar",
+    "reporterId": "user-c08c68e3-28d7-4474-a9aa-c28992ff1978",
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-09T11:22:08.415Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "authenticated-user"
+  },
+  {
+    "id": "CP-PNE-2026-000007",
+    "title": "Encroachment Removal issue near Dhankawadi",
+    "titleMr": "Encroachment Removal issue near Dhankawadi",
+    "description": "illegal encrochment",
+    "descriptionMr": "illegal encrochment",
+    "category": "encroach",
+    "status": "new",
+    "severity": "critical",
+    "wardId": 14,
+    "wardName": "Dhankawadi",
+    "wardNameMr": "Dhankawadi",
+    "lat": 18.447948647947804,
+    "lng": 73.85864104011996,
+    "imageUrl": "/uploads/1775710154981-3b46eca0-127e-48d8-a042-4a1aebadb49d.jpg",
+    "resolvedImageUrl": null,
+    "createdAt": "2026-04-09T04:49:15.027Z",
+    "updatedAt": "2026-04-09T04:49:15.027Z",
+    "anonymous": false,
+    "reporterName": "Citizen Reporter",
+    "reporterId": null,
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-09T04:49:15.027Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  },
+  {
+    "id": "CP-PNE-2026-000006",
+    "title": "Building Permission issue near Sahakarnagar",
+    "titleMr": "Building Permission issue near Sahakarnagar",
+    "description": "this contruction is illegal",
+    "descriptionMr": "this contruction is illegal",
+    "category": "illegal",
+    "status": "new",
+    "severity": "high",
+    "wardId": 10,
+    "wardName": "Sahakarnagar",
+    "wardNameMr": "Sahakarnagar",
+    "lat": 18.500334410019978,
+    "lng": 73.859097113421,
+    "imageUrl": "/uploads/1775707336749-11d5700b-5c57-4b2e-b299-0345419dde7a.jpg",
+    "resolvedImageUrl": null,
+    "createdAt": "2026-04-09T04:02:16.794Z",
+    "updatedAt": "2026-04-09T04:02:16.794Z",
+    "anonymous": true,
+    "reporterName": null,
+    "reporterId": null,
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-09T04:02:16.794Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  },
+  {
+    "id": "CP-PNE-2026-000011",
+    "title": "Drainage & Sewage issue near Hadapsar",
+    "titleMr": "Drainage & Sewage issue near Hadapsar",
+    "description": "';poliuytrfdfghjkl;'",
+    "descriptionMr": "';poliuytrfdfghjkl;'",
+    "category": "drainage",
+    "status": "verified",
+    "severity": "critical",
+    "wardId": 13,
+    "wardName": "Hadapsar",
+    "wardNameMr": "Hadapsar",
+    "lat": 18.494831107272617,
+    "lng": 73.9478979931836,
+    "imageUrl": "/uploads/1775700946015-9bceddd3-0d1b-4de0-be18-823e50e52c75.jpg",
+    "resolvedImageUrl": null,
+    "createdAt": "2026-04-09T02:15:46.127Z",
+    "updatedAt": "2026-04-09T03:15:37.750Z",
+    "anonymous": false,
+    "reporterName": "onkar",
+    "reporterId": "user-8ba27da3-ceef-49a1-b507-a74964b38b15",
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-09T02:15:46.127Z",
+        "note": "Issue submitted by citizen"
+      },
+      {
+        "status": "ack",
+        "timestamp": "2026-04-09T02:16:46.055Z",
+        "note": "Updated by PMC Admin"
+      },
+      {
+        "status": "new",
+        "timestamp": "2026-04-09T02:16:49.671Z",
+        "note": "Updated by PMC Admin"
+      },
+      {
+        "status": "verified",
+        "timestamp": "2026-04-09T03:15:31.154Z",
+        "note": "Updated by Super Admin"
+      },
+      {
+        "status": "inprog",
+        "timestamp": "2026-04-09T03:15:35.329Z",
+        "note": "Updated by Super Admin"
+      },
+      {
+        "status": "verified",
+        "timestamp": "2026-04-09T03:15:37.750Z",
+        "note": "Updated by Super Admin"
+      }
+    ],
+    "verification": null,
+    "source": "authenticated-user"
+  },
+  {
+    "id": "CP-PNE-2026-000010",
+    "title": "Roads & Transport issue near Sahakarnagar - Ward 22",
+    "titleMr": "Roads & Transport issue near Sahakarnagar - Ward 22",
+    "description": "Frontend flow verification issue created by Playwright",
+    "descriptionMr": "Frontend flow verification issue created by Playwright",
+    "category": "pothole",
+    "status": "new",
+    "severity": "medium",
+    "wardId": 22,
+    "wardName": "Sahakarnagar - Ward 22",
+    "wardNameMr": "सहकारनगर - प्रभाग 22",
+    "lat": 18.52030670090818,
+    "lng": 73.83705139160158,
+    "imageUrl": "/uploads/1775669847574-1fc97830-d088-4114-94b4-ffc9b4aa2c87.png",
+    "createdAt": "2026-04-08T17:37:27.607Z",
+    "updatedAt": "2026-04-08T17:37:27.607Z",
+    "anonymous": false,
+    "reporterName": "Citizen Reporter",
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-08T17:37:27.607Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  },
+  {
+    "id": "CP-PNE-2026-000009",
+    "title": "Roads & Transport issue near Sahakarnagar - Ward 22",
+    "titleMr": "Roads & Transport issue near Sahakarnagar - Ward 22",
+    "description": "Frontend flow verification issue created by Playwright",
+    "descriptionMr": "Frontend flow verification issue created by Playwright",
+    "category": "pothole",
+    "status": "new",
+    "severity": "medium",
+    "wardId": 22,
+    "wardName": "Sahakarnagar - Ward 22",
+    "wardNameMr": "सहकारनगर - प्रभाग 22",
+    "lat": 18.52030670090818,
+    "lng": 73.83705139160158,
+    "imageUrl": "/uploads/1775669778966-c97aa7f2-1550-4a9c-b0da-6c9640a075d4.png",
+    "createdAt": "2026-04-08T17:36:19.012Z",
+    "updatedAt": "2026-04-08T17:36:19.012Z",
+    "anonymous": false,
+    "reporterName": "Citizen Reporter",
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-08T17:36:19.012Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  },
+  {
+    "id": "CP-PNE-2026-000008",
+    "title": "Solid Waste Mgmt issue near Kasba Peth - Ward 52",
+    "titleMr": "Solid Waste Mgmt issue near Kasba Peth - Ward 52",
+    "description": "Photo upload verification issue from automated test",
+    "descriptionMr": "Photo upload verification issue from automated test",
+    "category": "garbage",
+    "status": "resolved",
+    "severity": "medium",
+    "wardId": 52,
+    "wardName": "Kasba Peth - Ward 52",
+    "wardNameMr": "कसबा पेठ - प्रभाग 52",
+    "lat": 18.5314,
+    "lng": 73.8446,
+    "imageUrl": "/uploads/1775668400093-98272a13-e6eb-4e44-9f49-9abdb142b8fe.png",
+    "createdAt": "2026-04-08T17:13:20.105Z",
+    "updatedAt": "2026-04-08T17:14:51.007Z",
+    "anonymous": false,
+    "reporterName": "Citizen Reporter",
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-08T17:13:20.105Z",
+        "note": "Issue submitted by citizen"
+      },
+      {
+        "status": "resolved",
+        "timestamp": "2026-04-08T17:14:51.007Z",
+        "note": "Admin test update"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  },
+  {
+    "id": "CP-PNE-2026-000007",
+    "title": "Roads & Transport issue near Balewadi - Ward 78",
+    "titleMr": "Roads & Transport issue near Balewadi - Ward 78",
+    "description": "Test issue from Codex verification flow near Pune",
+    "descriptionMr": "Test issue from Codex verification flow near Pune",
+    "category": "pothole",
+    "status": "new",
+    "severity": "high",
+    "wardId": 78,
+    "wardName": "Balewadi - Ward 78",
+    "wardNameMr": "बालेवाडी - प्रभाग 78",
+    "lat": 18.5204,
+    "lng": 73.8567,
+    "imageUrl": "https://images.unsplash.com/photo-1584463699037-bd52eb68ab27?w=400&h=300&fit=crop",
+    "createdAt": "2026-04-08T17:11:47.862Z",
+    "updatedAt": "2026-04-08T17:11:47.862Z",
+    "anonymous": false,
+    "reporterName": "Citizen Reporter",
+    "timeline": [
+      {
+        "status": "new",
+        "timestamp": "2026-04-08T17:11:47.862Z",
+        "note": "Issue submitted by citizen"
+      }
+    ],
+    "verification": null,
+    "source": "user"
+  }
+]

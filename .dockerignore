@@ -1,0 +1,10 @@
+.git
+.gitignore
+.vscode
+.idea
+**/node_modules
+**/dist
+**/coverage
+**/.DS_Store
+**/*.log
+backend/uploads

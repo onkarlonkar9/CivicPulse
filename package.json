@@ -1,0 +1,12 @@
+{
+  "name": "pune-pulse-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:web": "npm --prefix frontend run dev",
+    "dev:api": "npm --prefix backend run dev",
+    "build:web": "npm --prefix frontend run build",
+    "test:web": "npm --prefix frontend run test",
+    "admin:create": "npm --prefix backend run create:admin"
+  }
+}

@@ -1,0 +1,14 @@
+export const categories = [
+    { id: 'garbage', translationKey: 'cat.garbage', icon: 'Trash2', department: 'Solid Waste Mgmt', slaHours: 24, monsoonSlaHours: 12 },
+    { id: 'pothole', translationKey: 'cat.pothole', icon: 'CircleAlert', department: 'Roads & Transport', slaHours: 168, monsoonSlaHours: 72 },
+    { id: 'streetlight', translationKey: 'cat.streetlight', icon: 'Lightbulb', department: 'Street Lighting', slaHours: 72 },
+    { id: 'water', translationKey: 'cat.water', icon: 'Droplets', department: 'Water Supply', slaHours: 48 },
+    { id: 'drainage', translationKey: 'cat.drainage', icon: 'Waves', department: 'Drainage & Sewage', slaHours: 48, monsoonSlaHours: 12 },
+    { id: 'park', translationKey: 'cat.park', icon: 'Trees', department: 'Garden & Tree', slaHours: 120 },
+    { id: 'stray', translationKey: 'cat.stray', icon: 'Bug', department: 'Animal Husbandry', slaHours: 24 },
+    { id: 'encroach', translationKey: 'cat.encroach', icon: 'Construction', department: 'Encroachment Removal', slaHours: 120 },
+    { id: 'noise', translationKey: 'cat.noise', icon: 'Volume2', department: 'Environment', slaHours: 72 },
+    { id: 'safety', translationKey: 'cat.safety', icon: 'ShieldAlert', department: 'Disaster Mgmt', slaHours: 12 },
+    { id: 'illegal', translationKey: 'cat.illegal', icon: 'Building2', department: 'Building Permission', slaHours: 120 },
+    { id: 'flood', translationKey: 'cat.flood', icon: 'CloudRain', department: 'Drainage + Roads', slaHours: 6 },
+];

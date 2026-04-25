@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 200" width="520" height="200">
+  <defs>
+    <!-- Primary gradient: saffron to deep blue (Maharashtra colors) -->
+    <linearGradient id="saffronBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B00;stop-opacity:1" />
+      <stop offset="55%" style="stop-color:#E8400A;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1A3C8F;stop-opacity:1" />
+    </linearGradient>
+    <!-- Icon ring gradient -->
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B00" />
+      <stop offset="100%" style="stop-color:#1A3C8F" />
+    </linearGradient>
+    <!-- Pulse glow -->
+    <radialGradient id="pulseGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#FF6B00;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#FF6B00;stop-opacity:0" />
+    </radialGradient>
+    <!-- Green accent for verified/civic -->
+    <linearGradient id="greenAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0A7A4B" />
+      <stop offset="100%" style="stop-color:#0EA572" />
+    </linearGradient>
+    <!-- Drop shadow filter -->
+    <filter id="iconShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#1A3C8F" flood-opacity="0.22"/>
+    </filter>
+    <filter id="textShadow" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1A3C8F" flood-opacity="0.12"/>
+    </filter>
+    <clipPath id="circleClip">
+      <circle cx="96" cy="100" r="72"/>
+    </clipPath>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  ICON MARK  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- Pulse glow behind icon -->
+  <circle cx="96" cy="100" r="72" fill="url(#pulseGlow)" opacity="0.6"/>
+
+  <!-- Outer ring — saffron to blue gradient -->
+  <circle cx="96" cy="100" r="68" fill="none" stroke="url(#ringGrad)" stroke-width="5" filter="url(#iconShadow)"/>
+
+  <!-- Inner ring — thinner, green -->
+  <circle cx="96" cy="100" r="56" fill="none" stroke="url(#greenAccent)" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.5"/>
+
+  <!-- Map pin body — solid, gradient fill -->
+  <path d="M96 44
+           C80 44 67 57 67 73
+           C67 92 96 122 96 122
+           C96 122 125 92 125 73
+           C125 57 112 44 96 44 Z"
+        fill="url(#saffronBlue)" filter="url(#iconShadow)"/>
+
+  <!-- Map pin inner circle (white) -->
+  <circle cx="96" cy="72" r="11" fill="white" opacity="0.95"/>
+
+  <!-- Checkmark inside pin (civic green, verified) -->
+  <polyline points="89,72 94,77 103,66"
+            fill="none" stroke="#0A7A4B" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Pulse rings emanating outward — signal/broadcast -->
+  <circle cx="96" cy="130" r="10" fill="none" stroke="#FF6B00" stroke-width="2" opacity="0.7"/>
+  <circle cx="96" cy="130" r="17" fill="none" stroke="#FF6B00" stroke-width="1.5" opacity="0.45"/>
+  <circle cx="96" cy="130" r="24" fill="none" stroke="#1A3C8F" stroke-width="1" opacity="0.25"/>
+
+  <!-- Civic star accents at 3 positions on the ring (PMC/civic motif) -->
+  <g opacity="0.85">
+    <!-- top star -->
+    <polygon points="96,30 97.5,34.5 102,34.5 98.5,37.2 100,42 96,39.2 92,42 93.5,37.2 90,34.5 94.5,34.5"
+             fill="#FF6B00" transform="scale(0.7) translate(41,-18)"/>
+    <!-- left star -->
+    <polygon points="96,30 97.5,34.5 102,34.5 98.5,37.2 100,42 96,39.2 92,42 93.5,37.2 90,34.5 94.5,34.5"
+             fill="#1A3C8F" transform="scale(0.6) translate(-72,95)"/>
+    <!-- right star -->
+    <polygon points="96,30 97.5,34.5 102,34.5 98.5,37.2 100,42 96,39.2 92,42 93.5,37.2 90,34.5 94.5,34.5"
+             fill="#0A7A4B" transform="scale(0.6) translate(103,95)"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  WORDMARK  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- "Civic" — bold, gradient fill -->
+  <text x="186" y="88"
+        font-family="'Georgia', 'Times New Roman', serif"
+        font-size="52"
+        font-weight="700"
+        letter-spacing="-1"
+        filter="url(#textShadow)">
+    <tspan fill="url(#saffronBlue)">Civic</tspan>
+  </text>
+
+  <!-- "Pulse" — bold, deep blue -->
+  <text x="302" y="88"
+        font-family="'Georgia', 'Times New Roman', serif"
+        font-size="52"
+        font-weight="700"
+        letter-spacing="-1"
+        fill="#1A3C8F"
+        filter="url(#textShadow)">Pulse</text>
+
+  <!-- Tagline in English -->
+  <text x="186" y="112"
+        font-family="'Trebuchet MS', 'Gill Sans', sans-serif"
+        font-size="13.5"
+        letter-spacing="2.5"
+        fill="#0A7A4B"
+        font-weight="600">PUNE CIVIC INTELLIGENCE PLATFORM</text>
+
+  <!-- Divider line between taglines -->
+  <line x1="186" y1="122" x2="510" y2="122" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Marathi tagline -->
+  <text x="186" y="141"
+        font-family="'Noto Sans Devanagari', 'Lohit Devanagari', serif"
+        font-size="14.5"
+        fill="#FF6B00"
+        font-weight="500"
+        letter-spacing="0.5">तक्रार करा · सत्यापित करा · मूल्यमापन करा</text>
+
+  <!-- Bottom accent bar — saffron | white | green (tri-color inspired) -->
+  <rect x="186" y="155" width="120" height="3.5" rx="2" fill="#FF6B00"/>
+  <rect x="310" y="155" width="8" height="3.5" rx="2" fill="#ffffff" opacity="0.6"/>
+  <rect x="322" y="155" width="120" height="3.5" rx="2" fill="#0A7A4B"/>
+
+  <!-- "Pune" badge -->
+  <rect x="186" y="163" width="56" height="20" rx="10" fill="#1A3C8F"/>
+  <text x="214" y="177"
+        font-family="'Trebuchet MS', sans-serif"
+        font-size="11"
+        fill="white"
+        font-weight="700"
+        letter-spacing="1"
+        text-anchor="middle">PUNE</text>
+
+  <!-- PMC integration badge -->
+  <rect x="250" y="163" width="86" height="20" rx="10" fill="none" stroke="#0A7A4B" stroke-width="1.5"/>
+  <text x="293" y="177"
+        font-family="'Trebuchet MS', sans-serif"
+        font-size="10.5"
+        fill="#0A7A4B"
+        font-weight="600"
+        letter-spacing="0.8"
+        text-anchor="middle">PMC · सिव्हिक</text>
+
+</svg>

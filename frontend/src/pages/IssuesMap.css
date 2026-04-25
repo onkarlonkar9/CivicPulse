@@ -1,0 +1,43 @@
+/* Custom marker cluster styles */
+.custom-marker-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.custom-cluster-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 12px;
+    padding: 0;
+}
+
+.leaflet-popup-content {
+    margin: 0;
+    padding: 12px;
+}
+
+.leaflet-popup-tip {
+    display: none;
+}
+
+/* Marker cluster animations */
+.marker-cluster {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* Heatmap container */
+.leaflet-heatmap-layer {
+    opacity: 0.6;
+}
