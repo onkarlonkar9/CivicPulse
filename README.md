@@ -1,20 +1,30 @@
 # civic-pune
 
-## WhatsApp OTP Setup (Real OTP)
+## Real OTP Setup (SMS + Email)
 
-Citizen OTP routes now support real WhatsApp delivery through Twilio.
+Citizen OTP routes now support real delivery over SMS (Twilio) and email (Resend).
 
-1. Create a Twilio account with WhatsApp sender enabled (sandbox or approved sender).
-2. Set backend environment variables:
-   - `WHATSAPP_OTP_ENABLED=true`
-   - `WHATSAPP_OTP_PROVIDER=twilio`
+1. Create a Twilio account and buy/verify an SMS sender number.
+2. Create a Resend account and verify your sender domain/email.
+3. Set backend environment variables:
+   - `SMS_OTP_ENABLED=true`
+   - `SMS_OTP_PROVIDER=twilio`
    - `TWILIO_ACCOUNT_SID=...`
    - `TWILIO_AUTH_TOKEN=...`
-   - `TWILIO_WHATSAPP_FROM=whatsapp:+14155238886` (or your approved WhatsApp sender)
-3. Keep `OTP_EXPOSE_DEV_CODE=false` in production.
+   - `TWILIO_SMS_FROM=+1XXXXXXXXXX`
+   - `EMAIL_OTP_ENABLED=true`
+   - `EMAIL_OTP_PROVIDER=resend`
+   - `RESEND_API_KEY=...`
+   - `EMAIL_OTP_FROM=alerts@yourdomain.com`
+   - `OTP_EXPOSE_DEV_CODE=false`
 
-When `WHATSAPP_OTP_ENABLED=false`, OTP request APIs will fail with a clear error instead of returning mock OTPs.
-`WHATSAPP_OTP_ENABLED` also accepts `TRUE`, `1`, `yes`, and quoted values like `"true"`.
+Behavior:
+- If user logs in/registers with phone, OTP is delivered via SMS.
+- If user logs in/registers with email, OTP is delivered via email.
+- If delivery channel is disabled or misconfigured, API returns a clear error.
+
+Backward compatibility:
+- Legacy variables `WHATSAPP_OTP_ENABLED`, `WHATSAPP_OTP_PROVIDER`, and `TWILIO_WHATSAPP_FROM` are still read as fallback for SMS config.
 
 ## Docker Containerization
 

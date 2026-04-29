@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input.jsx';
 import { Label } from '@/components/ui/label.jsx';
 import { User, Settings, FileText, Shield, Sparkles, KeyRound, UserRoundPlus } from 'lucide-react';
 import { fetchMyIssues, requestCitizenLoginOtp, requestCitizenRegisterOtp, verifyCitizenLoginOtp, verifyCitizenRegisterOtp } from '@/lib/api.js';
+import { mapBackendFieldErrors, validateCitizenCredentialStep, validateOtpStep } from '@/lib/formErrors.js';
 
 const initialState = {
     name: '',
@@ -32,6 +33,7 @@ const ProfileAuth = () => {
     const [myIssues, setMyIssues] = useState([]);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState({});
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -46,6 +48,13 @@ const ProfileAuth = () => {
 
     const updateField = (key, value) => {
         setForm((current) => ({ ...current, [key]: value }));
+        setFieldErrors((current) => {
+            const next = { ...current, [key]: '' };
+            if (key === 'phone' || key === 'email' || key === 'identifier') {
+                next.identifier = '';
+            }
+            return next;
+        });
     };
 
     const resetAuthFlow = (nextMode) => {
@@ -54,12 +63,20 @@ const ProfileAuth = () => {
         setForm(initialState);
         setError('');
         setMessage('');
+        setFieldErrors({});
     };
 
     const requestOtp = async (event) => {
         event.preventDefault();
         setError('');
         setMessage('');
+        const nextFieldErrors = validateCitizenCredentialStep(form, mode);
+        if (Object.keys(nextFieldErrors).length > 0) {
+            setFieldErrors(nextFieldErrors);
+            return;
+        }
+
+        setFieldErrors({});
 
         try {
             if (mode === 'login') {
@@ -80,6 +97,21 @@ const ProfileAuth = () => {
             setStep('otp');
             setMessage(t('auth.otpSent'));
         } catch (submitError) {
+            const nextFieldErrors = mapBackendFieldErrors(submitError, {
+                identifier: mode === 'login' ? 'identifier' : 'phone',
+                name: 'name',
+                phone: 'phone',
+                email: 'email',
+                password: 'password',
+                wardName: 'wardName',
+                area: 'area',
+                address: 'address',
+                pincode: 'pincode',
+            });
+
+            if (Object.keys(nextFieldErrors).length > 0) {
+                setFieldErrors(nextFieldErrors);
+            }
             setError(submitError.message);
         }
     };
@@ -88,6 +120,13 @@ const ProfileAuth = () => {
         event.preventDefault();
         setError('');
         setMessage('');
+        const nextFieldErrors = validateOtpStep(form);
+        if (Object.keys(nextFieldErrors).length > 0) {
+            setFieldErrors(nextFieldErrors);
+            return;
+        }
+
+        setFieldErrors({});
 
         try {
             const response = mode === 'login'
@@ -101,6 +140,13 @@ const ProfileAuth = () => {
                     : `${t('auth.welcome')}, ${response.user.name}`
             );
         } catch (submitError) {
+            const nextFieldErrors = mapBackendFieldErrors(submitError, {
+                identifier: 'identifier',
+                otp: 'otp',
+            });
+            if (Object.keys(nextFieldErrors).length > 0) {
+                setFieldErrors(nextFieldErrors);
+            }
             setError(submitError.message);
         }
     };
@@ -169,22 +215,27 @@ const ProfileAuth = () => {
                                             {mode === 'register' ? (
                                                 <div className="space-y-1.5">
                                                     <Label htmlFor="name">{t('common.name')}</Label>
-                                                    <Input id="name" value={form.name} onChange={(event) => updateField('name', event.target.value)} placeholder="Your full name" />
+                                                    <Input id="name" value={form.name} onChange={(event) => updateField('name', event.target.value)} placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} className={fieldErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                    {fieldErrors.name ? <p className="text-xs text-destructive">{fieldErrors.name}</p> : null}
                                                 </div>
                                             ) : null}
                                             <div className="space-y-1.5">
                                                 <Label htmlFor="identifier">{mode === 'login' ? 'Phone or Email' : t('common.phone')}</Label>
-                                                <Input id="identifier" value={mode === 'login' ? form.identifier : form.phone} onChange={(event) => updateField(mode === 'login' ? 'identifier' : 'phone', event.target.value)} placeholder={mode === 'login' ? 'Enter phone or email' : '10-digit mobile number'} />
+                                                <Input id="identifier" value={mode === 'login' ? form.identifier : form.phone} onChange={(event) => updateField(mode === 'login' ? 'identifier' : 'phone', event.target.value)} placeholder={mode === 'login' ? 'Enter phone or email' : '10-digit mobile number'} aria-invalid={Boolean(mode === 'login' ? fieldErrors.identifier : (fieldErrors.phone || fieldErrors.identifier))} className={(mode === 'login' ? fieldErrors.identifier : (fieldErrors.phone || fieldErrors.identifier)) ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                {mode === 'login' && fieldErrors.identifier ? <p className="text-xs text-destructive">{fieldErrors.identifier}</p> : null}
+                                                {mode === 'register' && (fieldErrors.phone || fieldErrors.identifier) ? <p className="text-xs text-destructive">{fieldErrors.phone || fieldErrors.identifier}</p> : null}
                                             </div>
                                             {mode === 'register' ? (
                                                 <div className="space-y-1.5">
                                                     <Label htmlFor="email">Email (optional)</Label>
-                                                    <Input id="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} placeholder="name@email.com" />
+                                                    <Input id="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} placeholder="name@email.com" aria-invalid={Boolean(fieldErrors.email || fieldErrors.identifier)} className={(fieldErrors.email || fieldErrors.identifier) ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                    {fieldErrors.email ? <p className="text-xs text-destructive">{fieldErrors.email}</p> : null}
                                                 </div>
                                             ) : null}
                                             <div className="space-y-1.5">
                                                 <Label htmlFor="password">{t('common.password')}</Label>
-                                                <Input id="password" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} placeholder="Use strong password" />
+                                                <Input id="password" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} placeholder="Use strong password" aria-invalid={Boolean(fieldErrors.password)} className={fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                {fieldErrors.password ? <p className="text-xs text-destructive">{fieldErrors.password}</p> : null}
                                             </div>
                                         </div>
 
@@ -194,19 +245,23 @@ const ProfileAuth = () => {
                                                 <div className="grid gap-3 md:grid-cols-2">
                                                     <div className="space-y-1.5">
                                                         <Label htmlFor="wardName">Ward</Label>
-                                                        <Input id="wardName" value={form.wardName} onChange={(event) => updateField('wardName', event.target.value)} placeholder="Ward name" />
+                                                        <Input id="wardName" value={form.wardName} onChange={(event) => updateField('wardName', event.target.value)} placeholder="Ward name" aria-invalid={Boolean(fieldErrors.wardName)} className={fieldErrors.wardName ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                        {fieldErrors.wardName ? <p className="text-xs text-destructive">{fieldErrors.wardName}</p> : null}
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <Label htmlFor="area">Area</Label>
-                                                        <Input id="area" value={form.area} onChange={(event) => updateField('area', event.target.value)} placeholder="Area or locality" />
+                                                        <Input id="area" value={form.area} onChange={(event) => updateField('area', event.target.value)} placeholder="Area or locality" aria-invalid={Boolean(fieldErrors.area)} className={fieldErrors.area ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                        {fieldErrors.area ? <p className="text-xs text-destructive">{fieldErrors.area}</p> : null}
                                                     </div>
                                                     <div className="space-y-1.5 md:col-span-2">
                                                         <Label htmlFor="address">Address</Label>
-                                                        <Input id="address" value={form.address} onChange={(event) => updateField('address', event.target.value)} placeholder="House no, street, landmark" />
+                                                        <Input id="address" value={form.address} onChange={(event) => updateField('address', event.target.value)} placeholder="House no, street, landmark" aria-invalid={Boolean(fieldErrors.address)} className={fieldErrors.address ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                        {fieldErrors.address ? <p className="text-xs text-destructive">{fieldErrors.address}</p> : null}
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <Label htmlFor="pincode">Pincode</Label>
-                                                        <Input id="pincode" value={form.pincode} onChange={(event) => updateField('pincode', event.target.value)} placeholder="6-digit pincode" />
+                                                        <Input id="pincode" value={form.pincode} onChange={(event) => updateField('pincode', event.target.value)} placeholder="6-digit pincode" aria-invalid={Boolean(fieldErrors.pincode)} className={fieldErrors.pincode ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                                        {fieldErrors.pincode ? <p className="text-xs text-destructive">{fieldErrors.pincode}</p> : null}
                                                     </div>
                                                 </div>
                                             </div>
@@ -218,7 +273,8 @@ const ProfileAuth = () => {
                                     <form className="space-y-3 rounded-xl border bg-slate-50 p-4" onSubmit={verifyOtp}>
                                         <div className="space-y-1.5">
                                             <Label htmlFor="otp">{t('auth.otpCode')}</Label>
-                                            <Input id="otp" value={form.otp} onChange={(event) => updateField('otp', event.target.value)} maxLength={6} placeholder="Enter 6-digit OTP" />
+                                            <Input id="otp" value={form.otp} onChange={(event) => updateField('otp', event.target.value)} maxLength={6} placeholder="Enter 6-digit OTP" aria-invalid={Boolean(fieldErrors.otp)} className={fieldErrors.otp ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                            {fieldErrors.otp ? <p className="text-xs text-destructive">{fieldErrors.otp}</p> : null}
                                         </div>
                                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                             <Button type="button" variant="outline" className="h-11" onClick={() => setStep('credentials')}>{t('report.back')}</Button>

@@ -1,18 +1,6 @@
+import { normalizePhone } from '@/lib/validators.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
-
-function normalizePhone(phone) {
-    const digits = String(phone || '').replace(/\D/g, '');
-
-    if (digits.length === 12 && digits.startsWith('91')) {
-        return digits.slice(-10);
-    }
-
-    if (digits.length === 11 && digits.startsWith('0')) {
-        return digits.slice(-10);
-    }
-
-    return digits;
-}
 
 function withNormalizedPhone(body) {
     if (!body || typeof body !== 'object') {
@@ -75,6 +63,7 @@ async function parseResponse(response) {
 
     if (!response.ok) {
         const error = new Error(payload.message || 'Request failed');
+        error.status = response.status;
         error.payload = payload;
         throw error;
     }

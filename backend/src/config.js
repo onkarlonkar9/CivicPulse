@@ -34,12 +34,18 @@ export const config = {
     adminBootstrapSecret: process.env.ADMIN_BOOTSTRAP_SECRET || 'change-this-admin-secret',
     otp: {
         exposeDevOtp: parseBooleanEnv(process.env.OTP_EXPOSE_DEV_CODE, false),
-        whatsapp: {
-            enabled: parseBooleanEnv(process.env.WHATSAPP_OTP_ENABLED, false),
-            provider: normalizeEnv(process.env.WHATSAPP_OTP_PROVIDER || 'twilio').toLowerCase(),
+        sms: {
+            enabled: parseBooleanEnv(process.env.SMS_OTP_ENABLED ?? process.env.WHATSAPP_OTP_ENABLED, false),
+            provider: normalizeEnv(process.env.SMS_OTP_PROVIDER || process.env.WHATSAPP_OTP_PROVIDER || 'twilio').toLowerCase(),
             twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
             twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-            twilioFromNumber: process.env.TWILIO_WHATSAPP_FROM || '',
+            twilioFromNumber: process.env.TWILIO_SMS_FROM || process.env.TWILIO_WHATSAPP_FROM || '',
+        },
+        email: {
+            enabled: parseBooleanEnv(process.env.EMAIL_OTP_ENABLED, false),
+            provider: normalizeEnv(process.env.EMAIL_OTP_PROVIDER || 'resend').toLowerCase(),
+            fromAddress: normalizeEnv(process.env.EMAIL_OTP_FROM || ''),
+            resendApiKey: process.env.RESEND_API_KEY || '',
         },
     },
     webOrigins: (process.env.WEB_ORIGIN || 'http://localhost:5173,http://localhost:8080')

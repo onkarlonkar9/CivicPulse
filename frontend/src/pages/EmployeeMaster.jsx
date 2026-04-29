@@ -5,16 +5,27 @@ import { Badge } from '@/components/ui/badge.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Input } from '@/components/ui/input.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx';
 import { createEmployee, fetchEmployees, fetchMeta, updateEmployee } from '@/lib/api.js';
 
 const initialForm = {
     name: '',
-    employeeCode: '',
     designation: '',
     email: '',
     phone: '',
     password: '',
 };
+
+const designationOptions = [
+    'Sanitation Inspector',
+    'Junior Engineer',
+    'Assistant Engineer',
+    'Ward Officer',
+    'Health Inspector',
+    'Electrical Supervisor',
+    'Road Maintenance Officer',
+    'Water Supply Officer',
+];
 
 function toggleInArray(values, value) {
     return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
@@ -179,8 +190,17 @@ export default function EmployeeMaster() {
 
                     <div className="grid gap-3 md:grid-cols-2">
                         <Input placeholder="Full name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
-                        <Input placeholder="Employee code (EMP-1001)" value={form.employeeCode} onChange={(event) => setForm((current) => ({ ...current, employeeCode: event.target.value }))} />
-                        <Input placeholder="Designation" value={form.designation} onChange={(event) => setForm((current) => ({ ...current, designation: event.target.value }))} />
+                        <Input placeholder="Employee code auto-generated (EMP-XXXX)" value="Auto-generated on create" disabled />
+                        <Select value={form.designation} onValueChange={(value) => setForm((current) => ({ ...current, designation: value }))}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select designation" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {designationOptions.map((designation) => (
+                                    <SelectItem key={designation} value={designation}>{designation}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         <Input placeholder="Email (optional)" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
                         <Input placeholder="Phone (optional)" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
                         <Input placeholder="Temporary password" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />

@@ -18,7 +18,7 @@ import registerSocialRoutes from './socialRoutes.js';
 import { calculateEstimatedResolutionTime, getUserNotifications, markNotificationAsRead, getUnreadCount, notifyStatusChange } from './notificationService.js';
 import { checkDuplicateIssues, followIssue, getFollowedIssues, getTopVotedIssues, isUserFollowing, markIssueAsVerified, notifyFollowers, unfollowIssue } from './issueEngagementService.js';
 import { buildWardMasterFromRemoteData, getWardMaster, parseWardMasterInput, saveWardMaster } from './wardMaster.js';
-import { sendWhatsappOtp } from './otpDelivery.js';
+import { sendOtp } from './otpDelivery.js';
 
 const app = express();
 const categoryMap = seededCategoryMap || new Map(categories.map((category) => [category.id, category]));
@@ -82,7 +82,7 @@ const createEmployeeSchema = z.object({
     email: emailSchema.optional(),
     phone: phoneSchema.optional(),
     password: passwordSchema,
-    employeeCode: z.coerce.string().trim().min(4).max(20).regex(/^[A-Za-z0-9-]+$/),
+    employeeCode: z.coerce.string().trim().min(4).max(20).regex(/^[A-Za-z0-9-]+$/).optional(),
     designation: z.coerce.string().trim().min(2).max(80),
     assignedWardIds: z.array(z.coerce.number().int().positive()).min(1),
     taskCategories: z.array(z.coerce.string().trim().min(1)).min(1),
@@ -292,6 +292,25 @@ function sortUsersByRecency(users) {
     });
 }
 
+function generateEmployeeCode(users) {
+    const prefix = 'EMP-';
+    const maxSerial = users.reduce((highest, user) => {
+        const code = String(user?.employeeCode || '').toUpperCase();
+        if (!code.startsWith(prefix)) {
+            return highest;
+        }
+
+        const numeric = Number.parseInt(code.slice(prefix.length), 10);
+        if (!Number.isNaN(numeric)) {
+            return Math.max(highest, numeric);
+        }
+
+        return highest;
+    }, 1000);
+
+    return `${prefix}${String(maxSerial + 1).padStart(4, '0')}`;
+}
+
 async function findUserByCredentials({ users, phone, password, roles }) {
     const candidates = sortUsersByRecency(
         users.filter((entry) => identifiersMatch(entry, phone))
@@ -419,22 +438,22 @@ app.post('/api/auth/citizen/request-register-otp', async (req, res) => {
         },
     });
 
-    if (parsed.data.phone) {
-        try {
-            await sendWhatsappOtp({
-                phone: parsed.data.phone,
-                otp,
-            });
-        } catch (error) {
-            res.status(502).json({ message: `Failed to send WhatsApp OTP: ${error.message}` });
-            return;
-        }
+    let delivery;
+    try {
+        delivery = await sendOtp({
+            phone: parsed.data.phone || null,
+            email: parsed.data.phone ? null : parsed.data.email,
+            otp,
+        });
+    } catch (error) {
+        res.status(502).json({ message: `Failed to send OTP: ${error.message}` });
+        return;
     }
 
     res.json(
         config.otp.exposeDevOtp
-            ? { message: parsed.data.phone ? 'OTP sent on WhatsApp for citizen registration' : 'OTP generated for citizen email registration', devOtp: otp }
-            : { message: parsed.data.phone ? 'OTP sent on WhatsApp for citizen registration' : 'OTP generated for citizen email registration' }
+            ? { message: `OTP sent via ${delivery.channel} for citizen registration`, devOtp: otp }
+            : { message: `OTP sent via ${delivery.channel} for citizen registration` }
     );
 });
 
@@ -495,22 +514,22 @@ app.post('/api/auth/citizen/request-login-otp', async (req, res) => {
         payload: { userId: user.id },
     });
 
-    if (user.phone) {
-        try {
-            await sendWhatsappOtp({
-                phone: user.phone,
-                otp,
-            });
-        } catch (error) {
-            res.status(502).json({ message: `Failed to send WhatsApp OTP: ${error.message}` });
-            return;
-        }
+    let delivery;
+    try {
+        delivery = await sendOtp({
+            phone: user.phone || null,
+            email: user.phone ? null : user.email,
+            otp,
+        });
+    } catch (error) {
+        res.status(502).json({ message: `Failed to send OTP: ${error.message}` });
+        return;
     }
 
     res.json(
         config.otp.exposeDevOtp
-            ? { message: user.phone ? 'OTP sent on WhatsApp for citizen login' : 'OTP generated for citizen email login', devOtp: otp }
-            : { message: user.phone ? 'OTP sent on WhatsApp for citizen login' : 'OTP generated for citizen email login' }
+            ? { message: `OTP sent via ${delivery.channel} for citizen login`, devOtp: otp }
+            : { message: `OTP sent via ${delivery.channel} for citizen login` }
     );
 });
 
@@ -941,10 +960,12 @@ app.post('/api/admin/employees', requireSuperAdmin, async (req, res) => {
     const users = await readUsers();
     const normalizedPhone = parsed.data.phone ? normalizePhone(parsed.data.phone) : null;
     const normalizedEmail = parsed.data.email ? normalizeEmail(parsed.data.email) : null;
+    const requestedEmployeeCode = parsed.data.employeeCode ? parsed.data.employeeCode.toUpperCase() : null;
+    const employeeCode = requestedEmployeeCode || generateEmployeeCode(users);
     const existing = users.find((user) => (
         (normalizedPhone && phonesMatch(user.phone, normalizedPhone))
         || (normalizedEmail && normalizeEmail(user.email) === normalizedEmail)
-        || (user.employeeCode && user.employeeCode === parsed.data.employeeCode)
+        || (user.employeeCode && user.employeeCode.toUpperCase() === employeeCode)
     ));
 
     if (existing) {
@@ -961,7 +982,7 @@ app.post('/api/admin/employees', requireSuperAdmin, async (req, res) => {
         email: normalizedEmail,
         passwordHash: await hashPassword(parsed.data.password),
         role: 'employee',
-        employeeCode: parsed.data.employeeCode.toUpperCase(),
+        employeeCode,
         designation: parsed.data.designation,
         assignedWardIds,
         wardId: assignedWardIds[0],

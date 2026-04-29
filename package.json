@@ -8,5 +8,12 @@
     "build:web": "npm --prefix frontend run build",
     "test:web": "npm --prefix frontend run test",
     "admin:create": "npm --prefix backend run create:admin"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.0",
+    "resend": "^6.12.2",
+    "twilio": "^6.0.0"
   }
 }
