@@ -1,6 +1,6 @@
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { Button } from '@/components/ui/button.jsx';
 import { X, ArrowRight } from 'lucide-react';
 

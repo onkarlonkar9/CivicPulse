@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { getCollection } from './mongo.js';
 import { requireAuth, getUserFromRequest } from './auth.js';
+import { moderateText } from './moderationService.js';
 
 const commentSchema = z.object({
     text: z.string().trim().min(1).max(500),
@@ -87,12 +88,23 @@ export function registerSocialRoutes(app) {
             const commentsCollection = await getCollection('comments');
             const reputations = await getCollection('userReputations');
             const now = new Date().toISOString();
+            const moderation = moderateText(parsed.data.text);
+
+            if (moderation.status === 'blocked') {
+                res.status(422).json({
+                    message: 'Comment violates community guidelines',
+                    moderation,
+                });
+                return;
+            }
 
             const comment = {
                 id: `comment-${randomUUID()}`,
                 issueId: req.params.id,
                 authorId: user?.id || null,
                 text: parsed.data.text,
+                moderation,
+                moderationFlag: moderation.status === 'review',
                 isAiGenerated: false,
                 helpfulCount: 0,
                 createdAt: now,

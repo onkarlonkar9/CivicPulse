@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
-import { useAuth } from '@/contexts/AuthContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
+import { useAuth } from '@/contexts/useAuth.js';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';

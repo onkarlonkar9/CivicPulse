@@ -17,4 +17,4 @@ const badgeVariants = cva("inline-flex items-center rounded-full border px-2.5 p
 function Badge({ className, variant, ...props }) {
     return <div className={cn(badgeVariants({ variant }), className)} {...props}/>;
 }
-export { Badge, badgeVariants };
+export { Badge };

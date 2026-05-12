@@ -53,6 +53,7 @@ export async function ensureMongoIndexes() {
             const inviteCodes = await getCollection('inviteCodes');
             const otpCodes = await getCollection('otpCodes');
             const notifications = await getCollection('notifications');
+            const tasks = await getCollection('tasks');
 
             await Promise.all([
                 users.createIndex({ id: 1 }, { unique: true }),
@@ -114,6 +115,10 @@ export async function ensureMongoIndexes() {
                 notifications.createIndex({ id: 1 }, { unique: true }),
                 notifications.createIndex({ userId: 1, createdAt: -1 }),
                 notifications.createIndex({ userId: 1, read: 1 }),
+                tasks.createIndex({ id: 1 }, { unique: true }),
+                tasks.createIndex({ issueId: 1 }),
+                tasks.createIndex({ assignedToEmployeeId: 1, status: 1 }),
+                tasks.createIndex({ wardId: 1, status: 1, createdAt: -1 }),
             ]);
         })();
     }

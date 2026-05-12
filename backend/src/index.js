@@ -2,26 +2,36 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'node:path';
+import http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { categories } from '../../frontend/src/data/categories.js';
+import { WebSocketServer } from 'ws';
+import { categories } from './data/categories.js';
 import { config } from './config.js';
 import { comparePassword, getUserFromRequest, hashPassword, requireAdmin, requireAuth, requireStaff, requireSuperAdmin, signToken, toPublicUser } from './auth.js';
 import { consumeOtpChallenge, createCitizenFromOtp, createOtpChallenge } from './authFlows.js';
 import { categoryMap as seededCategoryMap } from './seed.js';
 import { buildCityIssueStats, buildWardAnalytics } from './wardAnalytics.js';
+import { buildDepartmentAnalytics, buildTrends } from './advancedAnalyticsService.js';
 import { normalizePhone, phonesMatch } from './phone.js';
-import { ensureStorage, readIssues, readUsers, writeIssues, writeUsers } from './store.js';
+import { ensureStorage, readIssues, readTasks, readUsers, writeIssues, writeTasks, writeUsers } from './store.js';
 import { migrateLegacyJsonData } from './migrateJsonToMongo.js';
 import { buildTicketId, findWardByCoordinates, makeUploadedImagePath, toPublicIssue } from './utils.js';
 import registerSocialRoutes from './socialRoutes.js';
 import { calculateEstimatedResolutionTime, getUserNotifications, markNotificationAsRead, getUnreadCount, notifyStatusChange } from './notificationService.js';
 import { checkDuplicateIssues, followIssue, getFollowedIssues, getTopVotedIssues, isUserFollowing, markIssueAsVerified, notifyFollowers, unfollowIssue } from './issueEngagementService.js';
 import { buildWardMasterFromRemoteData, getWardMaster, parseWardMasterInput, saveWardMaster } from './wardMaster.js';
-import { sendOtp } from './otpDelivery.js';
+import { sendOtp, sendSmsMessage } from './otpDelivery.js';
+import { moderateText } from './moderationService.js';
+import { generateIssueSummary } from './summaryService.js';
+import { suggestCategory } from './aiCategorizationService.js';
 
 const app = express();
+const server = http.createServer(app);
 const categoryMap = seededCategoryMap || new Map(categories.map((category) => [category.id, category]));
+const wsServer = new WebSocketServer({ noServer: true });
+const wsClients = new Map();
 
 const upload = multer({
     storage: multer.diskStorage({
@@ -108,8 +118,28 @@ const statusSchema = z.object({
     note: z.string().trim().max(300).optional(),
 });
 
+const prioritySchema = z.object({
+    priority: z.enum(['p1', 'p2', 'p3', 'p4']),
+    note: z.string().trim().max(300).optional(),
+});
+
+const escalationSchema = z.object({
+    toLevel: z.enum(['senior-staff', 'department-head', 'commissioner']),
+    reason: z.string().trim().min(4).max(200),
+    note: z.string().trim().max(300).optional(),
+    priorityOverride: z.enum(['p1', 'p2', 'p3', 'p4']).optional(),
+});
+
 const verificationSchema = z.object({
     verified: z.boolean(),
+});
+
+const summarizeIssueSchema = z.object({
+    title: z.coerce.string().trim().max(180).optional().default(''),
+    description: z.coerce.string().trim().min(8).max(1000),
+    category: z.coerce.string().trim().min(1).optional().default(''),
+    wardName: z.coerce.string().trim().max(120).optional().default(''),
+    severity: z.enum(['low', 'medium', 'high', 'critical']).optional().default('medium'),
 });
 
 const createIssueSchema = z.object({
@@ -150,6 +180,55 @@ const wardMasterUpdateSchema = z.object({
 const wardMasterSyncUrlSchema = z.object({
     url: z.coerce.string().trim().url(),
 });
+
+const issueFilterSaveSchema = z.object({
+    name: z.coerce.string().trim().min(2).max(80),
+    filters: z.object({
+        keyword: z.coerce.string().trim().optional().default(''),
+        location: z.coerce.string().trim().optional().default(''),
+        category: z.coerce.string().trim().optional().default('all'),
+        status: z.coerce.string().trim().optional().default('all'),
+        severity: z.coerce.string().trim().optional().default('all'),
+        wardId: z.coerce.string().trim().optional().default('all'),
+        from: z.coerce.string().trim().optional().default(''),
+        to: z.coerce.string().trim().optional().default(''),
+        resolutionTimeMinDays: z.coerce.number().min(0).optional(),
+        resolutionTimeMaxDays: z.coerce.number().min(0).optional(),
+    }),
+});
+
+const notificationPreferenceSchema = z.object({
+    channels: z.object({
+        sms: z.boolean().optional(),
+        email: z.boolean().optional(),
+        inApp: z.boolean().optional(),
+    }).optional(),
+    frequency: z.enum(['instant', 'daily', 'weekly']).optional(),
+    categories: z.array(z.coerce.string().trim().min(1)).optional(),
+    criticalAlertsOnly: z.boolean().optional(),
+});
+
+const feedbackSchema = z.object({
+    rating: z.coerce.number().int().min(1).max(5),
+    comment: z.coerce.string().trim().max(500).optional(),
+});
+
+const taskStatusSchema = z.object({
+    status: z.enum(['unassigned', 'assigned', 'in_progress', 'blocked', 'completed', 'cancelled']),
+    note: z.coerce.string().trim().max(300).optional(),
+});
+
+const taskAssignSchema = z.object({
+    employeeId: z.coerce.string().trim().min(1),
+    expectedUpdatedAt: z.coerce.string().trim().optional(),
+    note: z.coerce.string().trim().max(300).optional(),
+});
+
+function asyncHandler(handler) {
+    return (req, res, next) => {
+        Promise.resolve(handler(req, res, next)).catch(next);
+    };
+}
 
 function baseUrlFor(req) {
     return `${req.protocol}://${req.get('host')}`;
@@ -226,6 +305,125 @@ function canEmployeeHandleIssue(user, issue) {
     return wardAllowed && categoryAllowed;
 }
 
+function canEmployeeHandleTask(user, task) {
+    if (!user || user.role !== 'employee') {
+        return false;
+    }
+
+    const assignedWardIds = Array.isArray(user.assignedWardIds) ? user.assignedWardIds : [];
+    const taskCategories = Array.isArray(user.taskCategories) ? user.taskCategories : [];
+    const wardAllowed = assignedWardIds.includes(task.wardId);
+    const categoryAllowed = taskCategories.length === 0 || taskCategories.includes(task.category);
+    return wardAllowed && categoryAllowed;
+}
+
+function pickEmployeeAssignee(users, wardId, category) {
+    const employees = users.filter((entry) => (
+        entry.role === 'employee'
+        && entry.active !== false
+        && Array.isArray(entry.assignedWardIds)
+        && entry.assignedWardIds.includes(wardId)
+        && (
+            !Array.isArray(entry.taskCategories)
+            || entry.taskCategories.length === 0
+            || entry.taskCategories.includes(category)
+        )
+    ));
+
+    if (employees.length === 0) {
+        return null;
+    }
+
+    return employees[0];
+}
+
+function canUserAccessTask(user, task) {
+    if (!user || !task) {
+        return false;
+    }
+    if (['admin', 'super-admin'].includes(user.role)) {
+        return true;
+    }
+    if (user.role === 'employee') {
+        return task.assignedToEmployeeId === user.id || canEmployeeHandleTask(user, task);
+    }
+    return false;
+}
+
+function getSlaDaysForPriority(priority) {
+    if (priority === 'p1') return 1;
+    if (priority === 'p2') return 2;
+    if (priority === 'p3') return 4;
+    return 7;
+}
+
+function buildDueAt(priority, fromIso = new Date().toISOString()) {
+    const days = getSlaDaysForPriority(priority);
+    const start = new Date(fromIso);
+    start.setDate(start.getDate() + days);
+    return start.toISOString();
+}
+
+const TASK_TRANSITIONS = {
+    unassigned: ['assigned', 'cancelled'],
+    assigned: ['in_progress', 'blocked', 'cancelled', 'unassigned'],
+    in_progress: ['blocked', 'completed', 'cancelled'],
+    blocked: ['assigned', 'in_progress', 'cancelled'],
+    completed: [],
+    cancelled: [],
+};
+
+async function syncTasksWithIssueStatus(issueId, issueStatus, actor = { id: 'system', role: 'system', name: 'System' }) {
+    const tasks = await readTasks();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    const nextTasks = tasks.map((task) => {
+        if (task.issueId !== issueId) {
+            return task;
+        }
+
+        if (task.status === 'cancelled') {
+            return task;
+        }
+
+        let nextStatus = null;
+        if (issueStatus === 'inprog' && ['unassigned', 'assigned', 'blocked'].includes(task.status)) {
+            nextStatus = 'in_progress';
+        } else if (['resolved', 'verified', 'closed'].includes(issueStatus) && task.status !== 'completed') {
+            nextStatus = 'completed';
+        } else if (issueStatus === 'reopened' && ['completed', 'blocked'].includes(task.status)) {
+            nextStatus = task.assignedToEmployeeId ? 'assigned' : 'unassigned';
+        }
+
+        if (!nextStatus || nextStatus === task.status) {
+            return task;
+        }
+
+        changed = true;
+        return {
+            ...task,
+            status: nextStatus,
+            updatedAt: now,
+            timeline: [
+                ...(task.timeline || []),
+                {
+                    status: nextStatus,
+                    timestamp: now,
+                    actorId: actor.id,
+                    actorRole: actor.role,
+                    actorName: actor.name,
+                    note: `Synced from issue status: ${issueStatus}`,
+                },
+            ],
+        };
+    });
+
+    if (changed) {
+        await writeTasks(nextTasks);
+    }
+}
+
 function isIssueAcknowledgedByAssignedEmployee(issue) {
     const hasExplicitAcknowledgment = Boolean(
         issue?.acknowledgedByEmployeeId
@@ -292,6 +490,69 @@ function sortUsersByRecency(users) {
     });
 }
 
+async function resolveUserFromToken(token) {
+    if (!token) {
+        return null;
+    }
+    try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET || 'pune-pulse-dev-secret');
+        const users = await readUsers();
+        return users.find((entry) => entry.id === payload.sub) || null;
+    } catch {
+        return null;
+    }
+}
+
+function broadcastEvent(event, audience = () => true) {
+    const payload = JSON.stringify(event);
+    for (const [socket, user] of wsClients.entries()) {
+        if (socket.readyState !== socket.OPEN) {
+            continue;
+        }
+        if (!audience(user)) {
+            continue;
+        }
+        socket.send(payload);
+    }
+}
+
+function getResolvedDays(issue) {
+    if (!issue?.createdAt || !Array.isArray(issue?.timeline)) {
+        return null;
+    }
+    const resolvedEvent = issue.timeline.find((entry) => ['resolved', 'verified', 'closed'].includes(entry?.status));
+    if (!resolvedEvent?.timestamp) {
+        return null;
+    }
+    const created = new Date(issue.createdAt).getTime();
+    const resolved = new Date(resolvedEvent.timestamp).getTime();
+    if (!Number.isFinite(created) || !Number.isFinite(resolved) || resolved < created) {
+        return null;
+    }
+    return (resolved - created) / (1000 * 60 * 60 * 24);
+}
+
+function matchesKeyword(issue, keyword) {
+    if (!keyword) {
+        return true;
+    }
+    const needle = keyword.toLowerCase();
+    const haystack = [
+        issue.id, issue.title, issue.titleMr, issue.description, issue.descriptionMr,
+        issue.category, issue.status, issue.wardName, issue.wardNameMr, issue.locationDescription,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(needle);
+}
+
+function createNotificationDefaults() {
+    return {
+        channels: { sms: false, email: true, inApp: true },
+        frequency: 'instant',
+        categories: [],
+        criticalAlertsOnly: false,
+    };
+}
+
 function generateEmployeeCode(users) {
     const prefix = 'EMP-';
     const maxSerial = users.reduce((highest, user) => {
@@ -341,6 +602,33 @@ app.use(cors((req, callback) => {
 }));
 app.use(express.json({ limit: '2mb' }));
 app.use('/uploads', express.static(config.uploadsDir));
+
+wsServer.on('connection', (socket, user) => {
+    wsClients.set(socket, user);
+    socket.send(JSON.stringify({ type: 'connected', at: new Date().toISOString() }));
+    socket.on('close', () => wsClients.delete(socket));
+});
+
+server.on('upgrade', async (request, socket, head) => {
+    try {
+        const requestUrl = new URL(request.url, 'http://localhost');
+        if (requestUrl.pathname !== '/ws') {
+            socket.destroy();
+            return;
+        }
+        const token = requestUrl.searchParams.get('token') || '';
+        const user = await resolveUserFromToken(token);
+        if (!user) {
+            socket.destroy();
+            return;
+        }
+        wsServer.handleUpgrade(request, socket, head, (ws) => {
+            wsServer.emit('connection', ws, user);
+        });
+    } catch {
+        socket.destroy();
+    }
+});
 
 app.get('/api/health', (_req, res) => {
     res.json({ ok: true, service: 'pune-pulse-api' });
@@ -616,7 +904,18 @@ app.get('/api/issues', async (req, res) => {
     const status = req.query.status?.toString();
     const category = req.query.category?.toString();
     const acknowledgedOnly = ['1', 'true', 'yes'].includes(String(req.query.acknowledgedOnly || '').toLowerCase());
+    const keyword = String(req.query.keyword || '').trim();
+    const location = String(req.query.location || '').trim();
+    const severity = String(req.query.severity || '').trim();
+    const wardId = String(req.query.wardId || '').trim();
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+    const resolutionTimeMinDays = Number(req.query.resolutionTimeMinDays);
+    const resolutionTimeMaxDays = Number(req.query.resolutionTimeMaxDays);
+    const moderation = String(req.query.moderation || 'all').trim().toLowerCase();
     const isStaffUser = ['employee', 'admin', 'super-admin'].includes(user?.role);
+    const fromDate = from ? new Date(from) : null;
+    const toDate = to ? new Date(to) : null;
 
     const filteredIssues = issues
         .filter((issue) => {
@@ -636,6 +935,50 @@ app.get('/api/issues', async (req, res) => {
         })
         .filter((issue) => !status || status === 'all' || issue.status === status)
         .filter((issue) => !category || category === 'all' || issue.category === category)
+        .filter((issue) => !severity || severity === 'all' || issue.severity === severity)
+        .filter((issue) => !wardId || wardId === 'all' || String(issue.wardId) === wardId)
+        .filter((issue) => !location || `${issue.wardName || ''} ${issue.locationDescription || ''}`.toLowerCase().includes(location.toLowerCase()))
+        .filter((issue) => matchesKeyword(issue, keyword))
+        .filter((issue) => {
+            if (!fromDate && !toDate) {
+                return true;
+            }
+            const createdAt = new Date(issue.createdAt);
+            if (fromDate && createdAt < fromDate) {
+                return false;
+            }
+            if (toDate && createdAt > toDate) {
+                return false;
+            }
+            return true;
+        })
+        .filter((issue) => {
+            if (moderation === 'flagged') {
+                return issue.moderationFlag === true;
+            }
+            if (moderation === 'clean') {
+                return issue.moderationFlag !== true;
+            }
+            return true;
+        })
+        .filter((issue) => {
+            const minValid = Number.isFinite(resolutionTimeMinDays);
+            const maxValid = Number.isFinite(resolutionTimeMaxDays);
+            if (!minValid && !maxValid) {
+                return true;
+            }
+            const resolvedDays = getResolvedDays(issue);
+            if (resolvedDays == null) {
+                return false;
+            }
+            if (minValid && resolvedDays < resolutionTimeMinDays) {
+                return false;
+            }
+            if (maxValid && resolvedDays > resolutionTimeMaxDays) {
+                return false;
+            }
+            return true;
+        })
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .map((issue) => {
             const publicIssue = toPublicIssue(sortTimeline(issue), baseUrlFor(req));
@@ -694,7 +1037,7 @@ app.get('/api/wards/lookup', async (req, res) => {
     res.json({ ward });
 });
 
-app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
+app.post('/api/issues', upload.array('photos', 5), asyncHandler(async (req, res) => {
     const parsed = createIssueSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -705,6 +1048,14 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
     const issues = await readIssues();
     const user = await getUserFromRequest(req);
     const { description, category, severity, anonymous, latitude, longitude, locationDescription } = parsed.data;
+    const moderation = moderateText(`${description}\n${locationDescription || ''}`);
+    if (moderation.status === 'blocked') {
+        res.status(422).json({
+            message: 'Issue content violates community guidelines',
+            moderation,
+        });
+        return;
+    }
     const wardMaster = await getWardMaster();
     const ward = findWardByCoordinates(latitude, longitude, wardMaster.wards);
 
@@ -731,12 +1082,17 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
         }
     }
 
-    const duplicates = await checkDuplicateIssues({
-        category,
-        wardId: ward.id,
-        lat: latitude,
-        lng: longitude,
-    });
+    let duplicates = [];
+    try {
+        duplicates = await checkDuplicateIssues({
+            category,
+            wardId: ward.id,
+            lat: latitude,
+            lng: longitude,
+        });
+    } catch (error) {
+        console.error('[issues] duplicate detection failed, continuing without block:', error?.message || error);
+    }
 
     if (duplicates.length > 0) {
         res.status(409).json({
@@ -750,6 +1106,13 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
     const issueId = buildTicketId(issues);
     const now = new Date().toISOString();
     const title = categoryInfo ? `${categoryInfo.department} issue near ${ward.nameEn}` : `Civic issue near ${ward.nameEn}`;
+    const aiSummary = generateIssueSummary({
+        title,
+        description,
+        category,
+        wardName: ward.nameEn,
+        severity,
+    });
 
     const files = req.files || [];
     const imageUrls = files.length > 0 
@@ -762,9 +1125,11 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
         titleMr: title,
         description,
         descriptionMr: description,
+        aiSummary,
         category,
         status: 'new',
         severity,
+        priority: severity === 'critical' ? 'p1' : severity === 'high' ? 'p2' : severity === 'medium' ? 'p3' : 'p4',
         wardId: ward.id,
         wardName: ward.nameEn,
         wardNameMr: ward.nameMr,
@@ -792,16 +1157,273 @@ app.post('/api/issues', upload.array('photos', 5), async (req, res) => {
         acknowledgedByWardId: null,
         acknowledgedAt: null,
         verification: null,
+        escalationHistory: [],
+        moderation,
+        moderationFlag: moderation.status === 'review',
         source: user ? 'authenticated-user' : 'user',
     };
 
     issues.unshift(issue);
     await writeIssues(issues);
 
+    const users = await readUsers();
+    const assignedEmployee = pickEmployeeAssignee(users, ward.id, category);
+    const taskNow = new Date().toISOString();
+    const task = {
+        id: `task-${Date.now()}-${randomUUID()}`,
+        issueId: issue.id,
+        wardId: issue.wardId,
+        category: issue.category,
+        priority: issue.priority || 'p3',
+        dueAt: buildDueAt(issue.priority || 'p3', taskNow),
+        status: assignedEmployee ? 'assigned' : 'unassigned',
+        assignedToEmployeeId: assignedEmployee?.id || null,
+        assignedToEmployeeName: assignedEmployee?.name || null,
+        assignedBy: 'system',
+        note: assignedEmployee ? 'Auto-assigned on issue creation' : 'No eligible employee found for auto-assignment',
+        createdAt: taskNow,
+        updatedAt: taskNow,
+        timeline: [
+            {
+                status: assignedEmployee ? 'assigned' : 'unassigned',
+                timestamp: taskNow,
+                actorId: 'system',
+                actorRole: 'system',
+                note: assignedEmployee ? `Assigned to ${assignedEmployee.name}` : 'Created in unassigned queue',
+            },
+        ],
+    };
+    const tasks = await readTasks();
+    tasks.unshift(task);
+    await writeTasks(tasks);
+    const publicIssue = toPublicIssue(issue, baseUrlFor(req));
+    broadcastEvent({ type: 'issue_created', issue: publicIssue }, () => true);
+    if (issue.severity === 'critical') {
+        broadcastEvent({ type: 'critical_alert', issue: publicIssue }, (wsUser) => ['employee', 'admin', 'super-admin'].includes(wsUser?.role));
+    }
+
     res.status(201).json({
         message: 'Issue created successfully',
-        issue: toPublicIssue(issue, baseUrlFor(req)),
+        ticketId: publicIssue.id,
+        issue: publicIssue,
     });
+}));
+
+app.get('/api/tasks/my', requireStaff, async (req, res) => {
+    const tasks = await readTasks();
+    const taskIssues = await readIssues();
+    const issueById = new Map(taskIssues.map((issue) => [issue.id, issue]));
+    const now = Date.now();
+
+    const visibleTasks = tasks
+        .filter((task) => {
+            if (req.user.role === 'employee') {
+                return task.assignedToEmployeeId === req.user.id || canEmployeeHandleTask(req.user, task);
+            }
+            return true;
+        })
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+        .map((task) => ({
+            ...task,
+            isOverdue: Boolean(task.dueAt) && new Date(task.dueAt).getTime() < now && !['completed', 'cancelled'].includes(task.status),
+            issue: issueById.get(task.issueId) ? toPublicIssue(sortTimeline(issueById.get(task.issueId)), baseUrlFor(req)) : null,
+        }));
+
+    res.json({ tasks: visibleTasks });
+});
+
+app.patch('/api/tasks/:id/status', requireStaff, async (req, res) => {
+    const parsed = taskStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid task status payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const tasks = await readTasks();
+    const taskIndex = tasks.findIndex((entry) => entry.id === req.params.id);
+    if (taskIndex === -1) {
+        res.status(404).json({ message: 'Task not found' });
+        return;
+    }
+
+    const currentTask = tasks[taskIndex];
+    if (!canUserAccessTask(req.user, currentTask)) {
+        res.status(403).json({ message: 'Task is outside your access scope' });
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const nextStatus = parsed.data.status;
+    const allowedTransitions = TASK_TRANSITIONS[currentTask.status] || [];
+    if (nextStatus !== currentTask.status && !allowedTransitions.includes(nextStatus)) {
+        res.status(400).json({ message: `Invalid task transition from ${currentTask.status} to ${nextStatus}` });
+        return;
+    }
+    const note = parsed.data.note || `Task moved to ${nextStatus}`;
+    const updatedTask = {
+        ...currentTask,
+        status: nextStatus,
+        updatedAt: now,
+        timeline: [
+            ...(currentTask.timeline || []),
+            {
+                status: nextStatus,
+                timestamp: now,
+                actorId: req.user.id,
+                actorRole: req.user.role,
+                actorName: req.user.name,
+                note,
+            },
+        ],
+    };
+
+    tasks[taskIndex] = updatedTask;
+    await writeTasks(tasks);
+
+    const issues = await readIssues();
+    const issueIndex = issues.findIndex((entry) => entry.id === updatedTask.issueId);
+    let publicIssue = null;
+    if (issueIndex !== -1) {
+        const issue = issues[issueIndex];
+        let derivedIssueStatus = null;
+        if (nextStatus === 'in_progress' && ['new', 'ack'].includes(issue.status)) {
+            derivedIssueStatus = 'inprog';
+        } else if (nextStatus === 'completed' && ['new', 'ack', 'inprog', 'reopened', 'escalated'].includes(issue.status)) {
+            derivedIssueStatus = 'resolved';
+        }
+
+        if (derivedIssueStatus && derivedIssueStatus !== issue.status) {
+            const syncedIssue = {
+                ...issue,
+                status: derivedIssueStatus,
+                updatedAt: now,
+                timeline: [
+                    ...(issue.timeline || []),
+                    {
+                        status: derivedIssueStatus,
+                        timestamp: now,
+                        actorId: req.user.id,
+                        actorName: req.user.name,
+                        actorRole: req.user.role,
+                        note: `Synced from task ${updatedTask.id}: ${nextStatus}`,
+                    },
+                ],
+            };
+            issues[issueIndex] = syncedIssue;
+            await writeIssues(issues);
+            publicIssue = toPublicIssue(sortTimeline(syncedIssue), baseUrlFor(req));
+        } else {
+            publicIssue = toPublicIssue(sortTimeline(issue), baseUrlFor(req));
+        }
+    }
+
+    res.json({ task: updatedTask, issue: publicIssue });
+});
+
+app.patch('/api/tasks/:id/assign', requireAdmin, async (req, res) => {
+    const parsed = taskAssignSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid task assignment payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const users = await readUsers();
+    const employee = users.find((entry) => entry.id === parsed.data.employeeId && entry.role === 'employee' && entry.active !== false);
+    if (!employee) {
+        res.status(404).json({ message: 'Employee not found or inactive' });
+        return;
+    }
+
+    const tasks = await readTasks();
+    const taskIndex = tasks.findIndex((entry) => entry.id === req.params.id);
+    if (taskIndex === -1) {
+        res.status(404).json({ message: 'Task not found' });
+        return;
+    }
+
+    const currentTask = tasks[taskIndex];
+    if (parsed.data.expectedUpdatedAt && currentTask.updatedAt && parsed.data.expectedUpdatedAt !== currentTask.updatedAt) {
+        res.status(409).json({
+            message: 'Task was updated by another user. Please refresh and try again.',
+            task: currentTask,
+        });
+        return;
+    }
+
+    const wardEligible = Array.isArray(employee.assignedWardIds) && employee.assignedWardIds.includes(currentTask.wardId);
+    const categories = Array.isArray(employee.taskCategories) ? employee.taskCategories : [];
+    const categoryEligible = categories.length === 0 || categories.includes(currentTask.category);
+    if (!wardEligible || !categoryEligible) {
+        res.status(400).json({ message: 'Selected employee is not eligible for this task ward/category' });
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const note = parsed.data.note || `Assigned to ${employee.name}`;
+    const nextStatus = ['completed', 'cancelled'].includes(currentTask.status) ? currentTask.status : 'assigned';
+    const updatedTask = {
+        ...currentTask,
+        status: nextStatus,
+        assignedToEmployeeId: employee.id,
+        assignedToEmployeeName: employee.name,
+        updatedAt: now,
+        timeline: [
+            ...(currentTask.timeline || []),
+            {
+                status: nextStatus,
+                timestamp: now,
+                actorId: req.user.id,
+                actorRole: req.user.role,
+                actorName: req.user.name,
+                note,
+                type: 'assignment',
+                employeeId: employee.id,
+                employeeName: employee.name,
+            },
+        ],
+    };
+
+    tasks[taskIndex] = updatedTask;
+    await writeTasks(tasks);
+    res.json({ task: updatedTask });
+});
+
+app.post('/api/ai/summarize-issue', requireStaff, async (req, res) => {
+    const parsed = summarizeIssueSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid summarize payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const summary = generateIssueSummary(parsed.data);
+    res.json({
+        summary,
+        model: 'rule-based-v1',
+        generatedAt: new Date().toISOString(),
+    });
+});
+
+app.post('/api/ai/suggest-category', upload.single('photo'), async (req, res) => {
+    const description = req.body.description || '';
+    const imagePath = req.file ? req.file.path : null;
+
+    if (!description && !imagePath) {
+        res.status(400).json({ message: 'Either description or photo is required for suggestion' });
+        return;
+    }
+
+    try {
+        const result = await suggestCategory({ description, imagePath });
+        res.json(result);
+    } catch (error) {
+        console.error('[AI] suggest-category endpoint failed:', error);
+        res.status(200).json({
+            suggestedCategory: 'other',
+            confidence: 0.5,
+            topCandidates: [{ id: 'other', confidence: 0.5 }],
+            provider: 'fallback',
+        });
+    }
 });
 
 app.patch('/api/issues/:id/status', requireStaff, async (req, res) => {
@@ -848,13 +1470,22 @@ app.patch('/api/issues/:id/status', requireStaff, async (req, res) => {
             {
                 status: parsed.data.status,
                 timestamp: now,
-                note: parsed.data.note || `Updated by ${req.user.name}`,
+                note: parsed.data.note || `Status changed to ${parsed.data.status}`,
+                actorId: req.user.id,
+                actorName: req.user.name,
+                actorRole: req.user.role,
+                previousStatus: oldStatus,
             },
         ],
     };
 
     issues[issueIndex] = updatedIssue;
     await writeIssues(issues);
+    await syncTasksWithIssueStatus(updatedIssue.id, updatedIssue.status, {
+        id: req.user.id,
+        role: req.user.role,
+        name: req.user.name,
+    });
 
     await notifyStatusChange(updatedIssue, oldStatus, parsed.data.status, parsed.data.note);
     await notifyFollowers(
@@ -862,8 +1493,186 @@ app.patch('/api/issues/:id/status', requireStaff, async (req, res) => {
         'followed_issue_update',
         parsed.data.note || `Issue ${updatedIssue.id} status changed to ${parsed.data.status}`
     );
+    const publicIssue = toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req));
+    broadcastEvent({ type: 'issue_status_updated', issue: publicIssue, oldStatus, newStatus: parsed.data.status }, () => true);
 
-    res.json({ issue: toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req)) });
+    res.json({ issue: publicIssue });
+});
+
+app.post('/api/issues/:id/escalate', requireAdmin, async (req, res) => {
+    const parsed = escalationSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid escalation payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const issues = await readIssues();
+    const issueIndex = issues.findIndex((entry) => entry.id === req.params.id);
+
+    if (issueIndex === -1) {
+        res.status(404).json({ message: 'Issue not found' });
+        return;
+    }
+
+    const currentIssue = issues[issueIndex];
+    const now = new Date().toISOString();
+    const escalationNote = parsed.data.note || `Escalated to ${parsed.data.toLevel} by ${req.user.name}`;
+    const oldStatus = currentIssue.status;
+    const nextPriority = parsed.data.priorityOverride || currentIssue.priority || 'p3';
+    const escalationEntry = {
+        actorId: req.user.id,
+        actorRole: req.user.role,
+        fromLevel: currentIssue.escalationLevel || 'ward-staff',
+        toLevel: parsed.data.toLevel,
+        reason: parsed.data.reason,
+        note: parsed.data.note || '',
+        timestamp: now,
+    };
+
+    const updatedIssue = {
+        ...currentIssue,
+        status: 'escalated',
+        priority: nextPriority,
+        escalationLevel: parsed.data.toLevel,
+        updatedAt: now,
+        escalationHistory: [...(currentIssue.escalationHistory || []), escalationEntry],
+        timeline: [
+            ...(currentIssue.timeline || []),
+            {
+                status: 'escalated',
+                timestamp: now,
+                note: escalationNote,
+                actorId: req.user.id,
+                actorName: req.user.name,
+                actorRole: req.user.role,
+                reason: parsed.data.reason,
+                toLevel: parsed.data.toLevel,
+            },
+        ],
+    };
+
+    issues[issueIndex] = updatedIssue;
+    await writeIssues(issues);
+    await syncTasksWithIssueStatus(updatedIssue.id, updatedIssue.status, {
+        id: req.user.id,
+        role: req.user.role,
+        name: req.user.name,
+    });
+
+    await notifyStatusChange(updatedIssue, oldStatus, 'escalated', escalationNote);
+    await notifyFollowers(
+        updatedIssue,
+        'followed_issue_update',
+        escalationNote
+    );
+
+    const publicIssue = toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req));
+    broadcastEvent({
+        type: 'issue_escalated',
+        issue: publicIssue,
+        escalation: escalationEntry,
+    }, () => true);
+
+    res.json({ issue: publicIssue });
+});
+
+app.patch('/api/issues/:id/priority', requireAdmin, async (req, res) => {
+    const parsed = prioritySchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid priority payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const issues = await readIssues();
+    const issueIndex = issues.findIndex((entry) => entry.id === req.params.id);
+
+    if (issueIndex === -1) {
+        res.status(404).json({ message: 'Issue not found' });
+        return;
+    }
+
+    const currentIssue = issues[issueIndex];
+    const now = new Date().toISOString();
+    const note = parsed.data.note || `Priority updated to ${parsed.data.priority} by ${req.user.name}`;
+    const updatedIssue = {
+        ...currentIssue,
+        priority: parsed.data.priority,
+        updatedAt: now,
+        timeline: [
+            ...(currentIssue.timeline || []),
+            {
+                status: currentIssue.status,
+                timestamp: now,
+                note,
+                actorId: req.user.id,
+                actorName: req.user.name,
+                actorRole: req.user.role,
+                type: 'priority_change',
+                newPriority: parsed.data.priority,
+            },
+        ],
+    };
+
+    issues[issueIndex] = updatedIssue;
+    await writeIssues(issues);
+
+    const publicIssue = toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req));
+    broadcastEvent({
+        type: 'issue_priority_updated',
+        issue: publicIssue,
+        priority: parsed.data.priority,
+    }, () => true);
+
+    res.json({ issue: publicIssue });
+});
+
+app.patch('/api/issues/:id/moderation-review', requireAdmin, async (req, res) => {
+    const note = z.coerce.string().trim().max(300).optional().parse(req.body?.note);
+    const issues = await readIssues();
+    const issueIndex = issues.findIndex((entry) => entry.id === req.params.id);
+
+    if (issueIndex === -1) {
+        res.status(404).json({ message: 'Issue not found' });
+        return;
+    }
+
+    const currentIssue = issues[issueIndex];
+    const now = new Date().toISOString();
+    const moderation = currentIssue.moderation || { status: 'clean', reasons: [] };
+    const reviewNote = note || `Moderation reviewed by ${req.user.name}`;
+    const updatedIssue = {
+        ...currentIssue,
+        moderationFlag: false,
+        moderation: {
+            ...moderation,
+            reviewedAt: now,
+            reviewedById: req.user.id,
+            reviewedByName: req.user.name,
+            reviewNote,
+        },
+        updatedAt: now,
+        timeline: [
+            ...(currentIssue.timeline || []),
+            {
+                status: currentIssue.status,
+                timestamp: now,
+                note: reviewNote,
+            },
+        ],
+    };
+
+    issues[issueIndex] = updatedIssue;
+    await writeIssues(issues);
+
+    const publicIssue = toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req));
+    broadcastEvent({
+        type: 'issue_moderation_reviewed',
+        issue: publicIssue,
+    }, () => true);
+
+    res.json({ issue: publicIssue });
 });
 
 app.post('/api/issues/:id/verify', async (req, res) => {
@@ -902,6 +1711,71 @@ app.post('/api/issues/:id/verify', async (req, res) => {
 
     issues[issueIndex] = updatedIssue;
     await writeIssues(issues);
+    await syncTasksWithIssueStatus(updatedIssue.id, updatedIssue.status, {
+        id: req.user?.id || 'citizen',
+        role: req.user?.role || 'citizen',
+        name: req.user?.name || 'Citizen',
+    });
+    broadcastEvent({ type: 'issue_status_updated', issue: toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req)), newStatus: verificationStatus }, () => true);
+
+    res.json({ issue: toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req)) });
+});
+
+app.post('/api/issues/:id/feedback', requireAuth, async (req, res) => {
+    const parsed = feedbackSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid feedback payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const issues = await readIssues();
+    const issueIndex = issues.findIndex((entry) => entry.id === req.params.id);
+
+    if (issueIndex === -1) {
+        res.status(404).json({ message: 'Issue not found' });
+        return;
+    }
+
+    const issue = issues[issueIndex];
+    if (issue.reporterPrivateId !== req.user.id && issue.reporterId !== req.user.id) {
+        res.status(403).json({ message: 'Only the reporter can provide feedback' });
+        return;
+    }
+
+    if (!['resolved', 'verified', 'closed'].includes(issue.status)) {
+        res.status(400).json({ message: 'Feedback can only be provided for resolved issues' });
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const citizenFeedback = {
+        rating: parsed.data.rating,
+        comment: parsed.data.comment || '',
+        submittedAt: now,
+    };
+
+    const updatedIssue = {
+        ...issue,
+        citizenFeedback,
+        updatedAt: now,
+        timeline: [
+            ...(issue.timeline || []),
+            {
+                status: issue.status,
+                timestamp: now,
+                note: `Citizen provided feedback: ${parsed.data.rating}/5`,
+                type: 'feedback',
+            },
+        ],
+    };
+
+    issues[issueIndex] = updatedIssue;
+    await writeIssues(issues);
+    await syncTasksWithIssueStatus(updatedIssue.id, updatedIssue.status, {
+        id: req.user.id,
+        role: req.user.role,
+        name: req.user.name,
+    });
 
     res.json({ issue: toPublicIssue(sortTimeline(updatedIssue), baseUrlFor(req)) });
 });
@@ -1049,6 +1923,141 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/users/me/notification-preferences', requireAuth, async (req, res) => {
+    res.json({ preferences: req.user.notificationPreferences || createNotificationDefaults() });
+});
+
+app.put('/api/users/me/notification-preferences', requireAuth, async (req, res) => {
+    const parsed = notificationPreferenceSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid notification preference payload', errors: parsed.error.flatten() });
+        return;
+    }
+
+    const users = await readUsers();
+    const userIndex = users.findIndex((entry) => entry.id === req.user.id);
+    if (userIndex === -1) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+    }
+
+    const current = users[userIndex].notificationPreferences || createNotificationDefaults();
+    const next = {
+        ...current,
+        ...(parsed.data.channels ? { channels: { ...current.channels, ...parsed.data.channels } } : {}),
+        ...(parsed.data.frequency ? { frequency: parsed.data.frequency } : {}),
+        ...(parsed.data.categories ? { categories: [...new Set(parsed.data.categories)] } : {}),
+        ...(typeof parsed.data.criticalAlertsOnly === 'boolean' ? { criticalAlertsOnly: parsed.data.criticalAlertsOnly } : {}),
+    };
+    users[userIndex] = { ...users[userIndex], notificationPreferences: next, updatedAt: new Date().toISOString() };
+    await writeUsers(users);
+    res.json({ preferences: next });
+});
+
+app.get('/api/users/me/saved-issue-filters', requireAuth, async (req, res) => {
+    res.json({ filters: req.user.savedIssueFilters || [] });
+});
+
+app.post('/api/users/me/saved-issue-filters', requireAuth, async (req, res) => {
+    const parsed = issueFilterSaveSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ message: 'Invalid saved filter payload', errors: parsed.error.flatten() });
+        return;
+    }
+    const users = await readUsers();
+    const userIndex = users.findIndex((entry) => entry.id === req.user.id);
+    if (userIndex === -1) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+    }
+    const current = users[userIndex].savedIssueFilters || [];
+    const savedFilter = { id: `flt-${Date.now()}`, ...parsed.data, createdAt: new Date().toISOString() };
+    users[userIndex] = { ...users[userIndex], savedIssueFilters: [savedFilter, ...current].slice(0, 20), updatedAt: new Date().toISOString() };
+    await writeUsers(users);
+    res.status(201).json({ filter: savedFilter });
+});
+
+app.delete('/api/users/me/saved-issue-filters/:id', requireAuth, async (req, res) => {
+    const users = await readUsers();
+    const userIndex = users.findIndex((entry) => entry.id === req.user.id);
+    if (userIndex === -1) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+    }
+    const current = users[userIndex].savedIssueFilters || [];
+    users[userIndex] = { ...users[userIndex], savedIssueFilters: current.filter((entry) => entry.id !== req.params.id), updatedAt: new Date().toISOString() };
+    await writeUsers(users);
+    res.json({ success: true });
+});
+
+app.get('/api/reports/issues/export', requireStaff, async (req, res) => {
+    const format = String(req.query.format || 'csv').toLowerCase();
+    const period = String(req.query.period || 'monthly').toLowerCase();
+    const wardId = String(req.query.wardId || '').trim();
+    const issues = await readIssues();
+    const scoped = issues.filter((issue) => !wardId || wardId === 'all' || String(issue.wardId) === wardId);
+    const now = new Date().toISOString();
+    const reportStatuses = ['new', 'ack', 'inprog', 'resolved', 'verified', 'closed', 'reopened', 'escalated'];
+    const summary = {
+        generatedAt: now,
+        period,
+        total: scoped.length,
+        byStatus: reportStatuses.reduce((acc, status) => ({ ...acc, [status]: scoped.filter((i) => i.status === status).length }), {}),
+        bySeverity: ['low', 'medium', 'high', 'critical'].reduce((acc, severityKey) => ({ ...acc, [severityKey]: scoped.filter((i) => i.severity === severityKey).length }), {}),
+    };
+
+    if (format === 'pdf') {
+        const content = [
+            'CivicPulse Issue Report',
+            `Generated At: ${summary.generatedAt}`,
+            `Period: ${summary.period}`,
+            `Total Issues: ${summary.total}`,
+            `Status Breakdown: ${JSON.stringify(summary.byStatus)}`,
+            `Severity Breakdown: ${JSON.stringify(summary.bySeverity)}`,
+            'Charts/Analytics: Provided as structured breakdown in this document.',
+        ].join('\n');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="issues-${period}.pdf"`);
+        res.send(Buffer.from(content, 'utf8'));
+        return;
+    }
+
+    const csvHeader = 'id,category,status,severity,wardId,wardName,createdAt,updatedAt,resolutionDays';
+    const csvRows = scoped.map((issue) => [
+        issue.id, issue.category, issue.status, issue.severity, issue.wardId, `"${issue.wardName || ''}"`, issue.createdAt, issue.updatedAt, getResolvedDays(issue) ?? '',
+    ].join(','));
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="issues-${period}.csv"`);
+    res.send([csvHeader, ...csvRows].join('\n'));
+});
+
+app.get('/api/reports/government', requireStaff, async (req, res) => {
+    const frequency = String(req.query.frequency || 'monthly').toLowerCase();
+    const issues = await readIssues();
+    const wardMaster = await getWardMaster();
+    const wardPerformance = wardMaster.wards.map((ward) => {
+        const wardIssues = issues.filter((issue) => Number(issue.wardId) === Number(ward.id));
+        const resolved = wardIssues.filter((issue) => ['resolved', 'verified', 'closed'].includes(issue.status));
+        const avgResolutionDays = resolved.length > 0
+            ? Math.round((resolved.map((issue) => getResolvedDays(issue) || 0).reduce((sum, days) => sum + days, 0) / resolved.length) * 10) / 10
+            : null;
+        return {
+            wardId: ward.id,
+            wardName: ward.nameEn,
+            totalIssues: wardIssues.length,
+            resolvedIssues: resolved.length,
+            avgResolutionDays,
+            criticalOpen: wardIssues.filter((issue) => issue.severity === 'critical' && !['resolved', 'verified', 'closed'].includes(issue.status)).length,
+        };
+    });
+    res.json({
+        generatedAt: new Date().toISOString(),
+        frequency,
+        citySummary: buildCityIssueStats(issues),
+        wardPerformance,
+    });
+});
+
 app.get('/api/analytics/wards', async (req, res) => {
     const issues = await readIssues();
     const wardMaster = await getWardMaster();
@@ -1080,6 +2089,19 @@ app.get('/api/analytics/wards/:id', async (req, res) => {
         },
         generatedAt: new Date().toISOString(),
     });
+});
+
+app.get('/api/analytics/departments', requireStaff, async (req, res) => {
+    const issues = await readIssues();
+    const stats = buildDepartmentAnalytics(issues, categories);
+    res.json({ departments: stats, generatedAt: new Date().toISOString() });
+});
+
+app.get('/api/analytics/trends', requireStaff, async (req, res) => {
+    const issues = await readIssues();
+    const days = Number(req.query.days) || 30;
+    const trends = buildTrends(issues, days);
+    res.json({ trends, generatedAt: new Date().toISOString() });
 });
 
 app.get('/api/dashboard/summary', async (req, res) => {
@@ -1325,6 +2347,72 @@ app.get('/api/issues/top/voted', async (req, res) => {
     res.json({ issues: enrichedIssues });
 });
 
+async function runReminderSweep() {
+    const issues = await readIssues();
+    const users = await readUsers();
+    const now = Date.now();
+    const pendingStatuses = new Set(['new', 'ack', 'inprog', 'escalated', 'reopened']);
+    let updated = false;
+
+    for (const issue of issues) {
+        if (!pendingStatuses.has(issue.status)) {
+            continue;
+        }
+        const createdAt = new Date(issue.createdAt).getTime();
+        if (!Number.isFinite(createdAt)) {
+            continue;
+        }
+        const ageDays = (now - createdAt) / (1000 * 60 * 60 * 24);
+        const reporter = users.find((entry) => entry.id === (issue.reporterPrivateId || issue.reporterId));
+        const prefs = reporter?.notificationPreferences || createNotificationDefaults();
+        const reminderLog = issue.reminderLog || {};
+
+        if (ageDays >= 3 && !reminderLog.citizenReminderSentAt && reporter?.phone && prefs.channels?.sms) {
+            await sendSmsMessage(reporter.phone, `CivicPulse: Issue ${issue.id} is still pending. We are following up with staff.`);
+            issue.reminderLog = { ...reminderLog, citizenReminderSentAt: new Date().toISOString() };
+            updated = true;
+        }
+
+        if (ageDays >= 1 && !reminderLog.workStartedNoticeSentAt && issue.status === 'inprog' && reporter?.phone && prefs.channels?.sms) {
+            await sendSmsMessage(reporter.phone, `CivicPulse: Work has started for issue ${issue.id} in your ward.`);
+            issue.reminderLog = { ...(issue.reminderLog || reminderLog), workStartedNoticeSentAt: new Date().toISOString() };
+            updated = true;
+        }
+
+        if (ageDays >= 7 && !reminderLog.slaEscalationSentAt) {
+            const previousEscalationLevel = issue.escalationLevel || 'ward-staff';
+            broadcastEvent(
+                { type: 'sla_breach_alert', issueId: issue.id, wardId: issue.wardId, severity: issue.severity, ageDays: Math.round(ageDays) },
+                (wsUser) => ['employee', 'admin', 'super-admin'].includes(wsUser?.role)
+            );
+            const autoEscalationTimestamp = new Date().toISOString();
+            issue.status = issue.status === 'escalated' ? issue.status : 'escalated';
+            issue.escalationLevel = issue.escalationLevel || 'senior-staff';
+            issue.priority = issue.priority || (issue.severity === 'critical' ? 'p1' : issue.severity === 'high' ? 'p2' : issue.severity === 'medium' ? 'p3' : 'p4');
+            issue.updatedAt = autoEscalationTimestamp;
+            issue.timeline = [...(issue.timeline || []), { status: 'escalated', timestamp: issue.updatedAt, note: 'Auto escalation: SLA breach' }];
+            issue.escalationHistory = [
+                ...(issue.escalationHistory || []),
+                {
+                    actorId: 'system',
+                    actorRole: 'system',
+                    fromLevel: previousEscalationLevel,
+                    toLevel: 'senior-staff',
+                    reason: 'sla-expired',
+                    note: 'Automatically escalated after SLA breach',
+                    timestamp: autoEscalationTimestamp,
+                },
+            ];
+            issue.reminderLog = { ...(issue.reminderLog || reminderLog), slaEscalationSentAt: new Date().toISOString() };
+            updated = true;
+        }
+    }
+
+    if (updated) {
+        await writeIssues(issues);
+    }
+}
+
 app.use((error, _req, res, _next) => {
     console.error(error);
 
@@ -1338,7 +2426,10 @@ app.use((error, _req, res, _next) => {
 
 await ensureStorage();
 await migrateLegacyJsonData();
+setInterval(() => {
+    runReminderSweep().catch((error) => console.error('Reminder sweep failed', error.message));
+}, 60 * 60 * 1000);
 
-app.listen(config.port, () => {
+server.listen(config.port, () => {
     console.log(`Pune Pulse API listening on http://localhost:${config.port}`);
 });

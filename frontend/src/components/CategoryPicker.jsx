@@ -1,4 +1,4 @@
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { categories } from '@/data/categories.js';
 import { Trash2, CircleAlert, Lightbulb, Droplets, Waves, Trees, Bug, Construction, Volume2, ShieldAlert, Building2, CloudRain } from 'lucide-react';
 import { cn } from '@/lib/utils.js';

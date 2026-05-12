@@ -1,5 +1,6 @@
 import { getCollection } from './mongo.js';
 import { createNotification } from './notificationService.js';
+import { checkSemanticDuplicates } from './semanticDuplicateService.js';
 
 // UPVOTING
 export async function upvoteIssue(issueId, userId) {
@@ -135,20 +136,32 @@ export async function getIssueVerification(issueId) {
 export async function checkDuplicateIssues(issue) {
     const issues = await getCollection('issues');
     
-    const duplicates = await issues.find({
-        category: issue.category,
+    // First find issues in the same ward that are active
+    const candidates = await issues.find({
         wardId: issue.wardId,
         status: { $in: ['new', 'ack', 'inprog'] },
         createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() },
     }).toArray();
 
-    const nearby = duplicates.filter(d => {
+    // Filter by physical distance first to keep the LLM prompt small
+    const nearby = candidates.filter(d => {
         if (!d.lat || !d.lng || !issue.lat || !issue.lng) return false;
         const distance = Math.sqrt(
             Math.pow(d.lat - issue.lat, 2) + Math.pow(d.lng - issue.lng, 2)
         );
-        return distance < 0.005;
+        return distance < 0.005; // Roughly 500 meters
     });
 
-    return nearby;
+    if (nearby.length === 0) return [];
+
+    // Use AI to determine if they are true semantic duplicates
+    const semanticDuplicates = await checkSemanticDuplicates(issue, nearby);
+    
+    // If AI found duplicates, return them. 
+    // Otherwise, fall back to exact category matching for safety.
+    if (semanticDuplicates.length > 0) {
+        return semanticDuplicates;
+    }
+
+    return nearby.filter(d => d.category === issue.category);
 }

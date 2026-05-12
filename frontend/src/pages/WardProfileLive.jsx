@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { fetchWardAnalyticsById } from '@/lib/api.js';
 import { getWardScoreTier } from '@/lib/wardMetrics.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx';

@@ -1,5 +1,5 @@
 import { Check, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 
 const statusFlow = ['new', 'ack', 'inprog', 'resolved'];
 

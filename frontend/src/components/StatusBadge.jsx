@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge.jsx';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { getStatusColor } from '@/data/status.js';
 const StatusBadge = ({ status }) => {
     const { t } = useTranslation();

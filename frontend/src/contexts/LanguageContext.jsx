@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { translations } from '@/data/translations.clean.js';
-const LanguageContext = createContext(undefined);
+import { LanguageContext } from '@/contexts/languageContextStore.js';
 export const LanguageProvider = ({ children }) => {
     const [language, setLang] = useState(() => {
         return localStorage.getItem('civicpulse_lang') || 'mr';
@@ -18,10 +18,4 @@ export const LanguageProvider = ({ children }) => {
     return (<LanguageContext.Provider value={{ language, setLanguage, t, toggleLanguage }}>
       {children}
     </LanguageContext.Provider>);
-};
-export const useTranslation = () => {
-    const context = useContext(LanguageContext);
-    if (!context)
-        throw new Error('useTranslation must be used within LanguageProvider');
-    return context;
 };

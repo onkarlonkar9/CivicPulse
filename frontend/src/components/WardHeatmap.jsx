@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { getWardScoreTier } from '@/lib/wardMetrics.js';
 
 const WardHeatmap = ({ wards }) => {

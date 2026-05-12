@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';

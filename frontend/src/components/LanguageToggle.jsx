@@ -1,4 +1,4 @@
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 const LanguageToggle = () => {

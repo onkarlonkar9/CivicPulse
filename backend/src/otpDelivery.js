@@ -67,6 +67,40 @@ async function sendTwilioSmsOtp(phone, otp) {
     }
 }
 
+async function sendTwilioSmsMessage(phone, messageBody) {
+    assertTwilioSmsConfigured();
+
+    const from = config.otp.sms.twilioFromNumber;
+    const to = from.startsWith('whatsapp:')
+        ? `whatsapp:${toIndianE164(phone)}`
+        : toIndianE164(phone);
+    const authHeader = Buffer.from(
+        `${config.otp.sms.twilioAccountSid}:${config.otp.sms.twilioAuthToken}`
+    ).toString('base64');
+
+    const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${config.otp.sms.twilioAccountSid}/Messages.json`,
+        {
+            method: 'POST',
+            headers: {
+                Authorization: `Basic ${authHeader}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                To: to,
+                From: from,
+                Body: messageBody,
+            }),
+        }
+    );
+
+    if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const apiMessage = payload?.message || `HTTP ${response.status}`;
+        throw new Error(`Twilio SMS send failed: ${apiMessage}`);
+    }
+}
+
 function assertResendConfigured() {
     const { resendApiKey, fromAddress } = config.otp.email;
     if (!resendApiKey || !fromAddress) {
@@ -137,5 +171,18 @@ export async function sendOtp({ phone, email, otp }) {
     }
 
     throw new Error('Phone or email is required for OTP delivery');
+}
+
+export async function sendSmsMessage(phone, message) {
+    if (!config.otp.sms.enabled) {
+        throw new Error('SMS is disabled');
+    }
+
+    if (config.otp.sms.provider === 'twilio') {
+        await sendTwilioSmsMessage(phone, message);
+        return;
+    }
+
+    throw new Error(`Unsupported SMS provider: ${config.otp.sms.provider}`);
 }
 

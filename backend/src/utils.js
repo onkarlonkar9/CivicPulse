@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { extractAdminWardId } from './wardMaster.js';
 
 let adminWardGeoJson = null;
-const adminWardGeoJsonPath = new URL('../../frontend/public/pune-admin-wards.geojson', import.meta.url);
+const adminWardGeoJsonPath = new URL('../public/pune-admin-wards.geojson', import.meta.url);
 
 function loadAdminWardGeoJson() {
     if (!adminWardGeoJson) {

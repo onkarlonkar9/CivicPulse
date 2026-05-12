@@ -5,8 +5,8 @@ import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Label } from '@/components/ui/label.jsx';
 import { Button } from '@/components/ui/button.jsx';
-import { useAuth } from '@/contexts/AuthContext.jsx';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useAuth } from '@/contexts/useAuth.js';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { mapBackendFieldErrors, validateAdminLogin } from '@/lib/formErrors.js';
 
 const AdminLogin = () => {

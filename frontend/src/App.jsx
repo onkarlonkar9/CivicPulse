@@ -19,6 +19,7 @@ import WardProfile from "./pages/WardProfileLive.jsx";
 import Profile from "./pages/ProfileAuth.jsx";
 import MyReports from "./pages/MyReports.jsx";
 import WardMasterAdmin from "./pages/WardMasterAdmin.jsx";
+import TaskBoard from "./pages/TaskBoard.jsx";
 import NotFound from "./pages/NotFound.jsx";
 const queryClient = new QueryClient();
 const App = () => (<QueryClientProvider client={queryClient}>
@@ -39,6 +40,7 @@ const App = () => (<QueryClientProvider client={queryClient}>
                 <Route path="/leaderboard" element={<Leaderboard />}/>
                 <Route path="/ward/:id" element={<WardProfile />}/>
                 <Route path="/employee" element={<AdminDashboard />}/>
+                <Route path="/employee/tasks" element={<TaskBoard />}/>
                 <Route path="/employee/master" element={<EmployeeMaster />}/>
                 <Route path="/employee/ward-master" element={<WardMasterAdmin />}/>
                 <Route path="/employee/login" element={<AdminLogin />}/>

@@ -28,7 +28,9 @@ Backward compatibility:
 
 ## Docker Containerization
 
-Run the full stack (`frontend` + `backend` + `mongo`):
+1. Create a project-level `.env` from `.env.example` if you need custom host ports.
+2. Ensure `backend/.env` contains your backend runtime secrets/config.
+3. Run the full stack (`frontend` + `backend` + `mongo`):
 
 ```bash
 docker compose up --build
@@ -36,8 +38,8 @@ docker compose up --build
 
 App URLs:
 
-- Frontend: `http://localhost:8080`
-- API health: `http://localhost:4000/api/health`
+- Frontend: `http://localhost:${FRONTEND_PORT:-8080}`
+- API health: `http://localhost:${BACKEND_PORT:-4000}/api/health`
 
 Stop containers:
 

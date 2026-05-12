@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext.jsx';
+import { useAuth } from '@/contexts/useAuth.js';
 import { Button } from '@/components/ui/button.jsx';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.jsx';
 import { ScrollArea } from '@/components/ui/scroll-area.jsx';

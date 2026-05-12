@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ThumbsUp, Bookmark, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
-import { useAuth } from '@/contexts/AuthContext.jsx';
+import { useAuth } from '@/contexts/useAuth.js';
 import { Badge } from '@/components/ui/badge.jsx';
 import { fetchIssueFollowState, fetchVotes, followIssue, toggleIssueUpvote, unfollowIssue } from '@/lib/api.js';
 

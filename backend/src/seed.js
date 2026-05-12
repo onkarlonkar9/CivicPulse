@@ -1,4 +1,4 @@
-import { categories } from '../../frontend/src/data/categories.js';
+import { categories } from './data/categories.js';
 
 export const seedIssues = [];
 

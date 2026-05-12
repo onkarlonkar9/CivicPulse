@@ -1,6 +1,6 @@
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { MapPin } from 'lucide-react';
 
 const MapPicker = ({ onLocationSelect, value = null, initialLat = 18.5204, initialLng = 73.8567 }) => {

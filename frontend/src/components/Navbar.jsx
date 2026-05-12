@@ -1,11 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import LanguageToggle from './LanguageToggle.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import { Home, FileWarning, ListChecks, Trophy, Shield, User } from 'lucide-react';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button.jsx';
-import { useAuth } from '@/contexts/AuthContext.jsx';
+import { useAuth } from '@/contexts/useAuth.js';
 import logo from "../assets/civicpulse_logo.svg";
 
 const Navbar = () => {

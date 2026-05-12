@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
-import { Switch } from '@/components/ui/switch.jsx';
 import { Label } from '@/components/ui/label.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx';
@@ -13,9 +12,9 @@ import MapPicker from '@/components/MapPicker.jsx';
 import FullscreenMapPicker from '@/components/FullscreenMapPicker.jsx';
 import { findAdminWardByCoordinates } from '@/lib/adminWardLookup.js';
 import { categories as defaultCategories } from '@/data/categories.js';
-import { CheckCircle2, ArrowLeft, ArrowRight, Camera, Home, MapPin, Maximize2, Image, X } from 'lucide-react';
+import { CheckCircle2, ArrowLeft, ArrowRight, Camera, Home, MapPin, Maximize2, Image, X, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
-import { createIssue, fetchMeta } from '@/lib/api.js';
+import { createIssue, fetchMeta, suggestCategoryAPI } from '@/lib/api.js';
 import { getCategoryLabel } from '@/lib/categoryLabel.js';
 import imageCompression from 'browser-image-compression';
 
@@ -39,7 +38,6 @@ const ReportIssue = () => {
     const [compressing, setCompressing] = useState(false);
     const [description, setDescription] = useState('');
     const [severity, setSeverity] = useState('medium');
-    const [anonymous, setAnonymous] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [ticketId, setTicketId] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -49,6 +47,31 @@ const ReportIssue = () => {
     const [isDetectingWard, setIsDetectingWard] = useState(false);
     const [redirectSeconds, setRedirectSeconds] = useState(REDIRECT_SECONDS);
     const [showFullscreenMap, setShowFullscreenMap] = useState(false);
+    const [aiSuggestion, setAiSuggestion] = useState(null);
+    const [isSuggesting, setIsSuggesting] = useState(false);
+
+    useEffect(() => {
+        if (step !== 3 || (!description && photoFiles.length === 0)) {
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            setIsSuggesting(true);
+            try {
+                const result = await suggestCategoryAPI({
+                    description,
+                    photo: photoFiles[0],
+                });
+                setAiSuggestion(result);
+            } catch (error) {
+                console.error('AI Suggestion failed:', error);
+            } finally {
+                setIsSuggesting(false);
+            }
+        }, 1500);
+
+        return () => clearTimeout(timer);
+    }, [description, photoFiles, step]);
 
     useEffect(() => {
         let isMounted = true;
@@ -185,10 +208,12 @@ const ReportIssue = () => {
         setDuplicateIssues([]);
 
         const formData = new FormData();
+        const normalizedDescription = description.trim();
+        const safeDescription = normalizedDescription.length >= 8 ? normalizedDescription : t('report.citizenReported');
+
         formData.append('category', category);
-        formData.append('description', description || t('report.citizenReported'));
+        formData.append('description', safeDescription);
         formData.append('severity', severity);
-        formData.append('anonymous', String(anonymous));
         formData.append('latitude', String(location.lat));
         formData.append('longitude', String(location.lng));
         formData.append('locationDescription', locationDescription.trim());
@@ -201,11 +226,15 @@ const ReportIssue = () => {
 
         try {
             const response = await createIssue(formData);
-            setTicketId(response.issue.id);
+            const resolvedTicketId = response?.ticketId || response?.issue?.id || '';
+            setTicketId(resolvedTicketId);
             setSubmitted(true);
         }
         catch (error) {
-            setSubmitError(error.message);
+            const message = error?.message === 'Failed to fetch'
+                ? 'Unable to reach the server. Please check your internet connection and try again.'
+                : error.message;
+            setSubmitError(message);
             setDuplicateIssues(error.payload?.duplicates || []);
         }
         finally {
@@ -225,7 +254,6 @@ const ReportIssue = () => {
         setPhotoPreview([]);
         setDescription('');
         setSeverity('medium');
-        setAnonymous(false);
         setSubmitError('');
         setDuplicateIssues([]);
         setWardError('');
@@ -413,7 +441,7 @@ const ReportIssue = () => {
                     {step === 3 && (
                         <div className="space-y-5">
                             <div>
-                                <Label className="mb-3 block text-base font-semibold">{t('report.addPhoto')} (Max 5)</Label>
+                                <Label className="mb-3 block text-base font-semibold">{t('report.addPhoto')} (Required) (Max 5)</Label>
                                 
                                 {photoPreview.length > 0 && (
                                     <div className="grid grid-cols-2 gap-3 mb-4">
@@ -480,6 +508,38 @@ const ReportIssue = () => {
                                 )}
                             </div>
 
+                            {isSuggesting && (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
+                                    <Sparkles className="h-4 w-4 text-primary" />
+                                    AI is analyzing your report for suggestions...
+                                </div>
+                            )}
+
+                            {aiSuggestion && aiSuggestion.suggestedCategory && aiSuggestion.suggestedCategory !== category && (
+                                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-start gap-2">
+                                        <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                        <div className="text-sm">
+                                            <p className="font-semibold text-primary">AI Suggestion</p>
+                                            <p>This looks like <strong>{getCategoryLabel(aiSuggestion.suggestedCategory, t, categoryOptions)}</strong>.</p>
+                                            {aiSuggestion.reasoning && (
+                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{aiSuggestion.reasoning}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <Button 
+                                        size="sm" 
+                                        className="shrink-0"
+                                        onClick={() => {
+                                            setCategory(aiSuggestion.suggestedCategory);
+                                            setAiSuggestion(null);
+                                        }}
+                                    >
+                                        Apply
+                                    </Button>
+                                </div>
+                            )}
+
                             <div>
                                 <Label className="mb-2 block">{t('report.addNote')}</Label>
                                 <Textarea
@@ -512,10 +572,6 @@ const ReportIssue = () => {
 
                     {step === 4 && (
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <Label>{t('report.anonymous')}</Label>
-                                <Switch checked={anonymous} onCheckedChange={setAnonymous} />
-                            </div>
                             {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
                             {duplicateIssues.length > 0 ? (
                                 <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
@@ -562,12 +618,12 @@ const ReportIssue = () => {
                             <div />
                         )}
                         {step < 4 ? (
-                            <Button onClick={() => setStep(step + 1)} disabled={(step === 1 && (!location || !detectedWard || isDetectingWard)) || (step === 2 && !category)} className="h-11 gap-1">
+                            <Button onClick={() => setStep(step + 1)} disabled={(step === 1 && (!location || !detectedWard || isDetectingWard)) || (step === 2 && !category) || (step === 3 && photoFiles.length === 0)} className="h-11 gap-1">
                                 {t('report.next')}
                                 <ArrowRight className="h-4 w-4" />
                             </Button>
                         ) : (
-                            <Button onClick={handleSubmit} className="h-11 gap-1" disabled={submitting}>
+                            <Button onClick={handleSubmit} className="h-11 gap-1" disabled={submitting || photoFiles.length === 0}>
                                 {t('report.submit')}
                             </Button>
                         )}

@@ -1,4 +1,4 @@
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import { CheckCircle2, Circle, Clock, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
 
@@ -35,7 +35,12 @@ const StatusTimelineLocalized = ({ timeline }) => {
                                 {t(`status.${entry.status}`)}
                             </p>
                             {entry.note ? <p className="mt-0.5 text-xs text-muted-foreground">{entry.note}</p> : null}
-                            <p className="text-xs text-muted-foreground">
+                            {entry.actorName && (
+                                <p className="mt-0.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                    By {entry.actorName} ({entry.actorRole})
+                                </p>
+                            )}
+                            <p className="text-[10px] text-muted-foreground">
                                 {date.toLocaleDateString(locale)} · {date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
                             </p>
                         </div>

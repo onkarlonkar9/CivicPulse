@@ -58,4 +58,6 @@ export const config = {
     usersFile: path.join(rootDir, 'data', 'users.json'),
     inviteCodesFile: path.join(rootDir, 'data', 'invite-codes.json'),
     otpCodesFile: path.join(rootDir, 'data', 'otp-codes.json'),
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
 };

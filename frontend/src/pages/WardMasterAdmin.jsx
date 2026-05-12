@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext.jsx';
+import { useAuth } from '@/contexts/useAuth.js';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
-import { useAuth } from '@/contexts/AuthContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
+import { useAuth } from '@/contexts/useAuth.js';
 import StatusBadge from '@/components/StatusBadge.jsx';
 import StatusTimeline from '@/components/StatusTimelineLocalized.jsx';
 import StatusProgress from '@/components/StatusProgress.jsx';
@@ -11,20 +11,34 @@ import { Badge } from '@/components/ui/badge.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx';
-import { MapPin, ArrowLeft, ThumbsUp, ThumbsDown, ExternalLink, User, ShieldCheck } from 'lucide-react';
-import { adminVerifyIssue, fetchIssueById, uploadResolvedIssuePhoto, verifyIssue } from '@/lib/api.js';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx';
+import { MapPin, ArrowLeft, ThumbsUp, ThumbsDown, ExternalLink, User, ShieldCheck, Star } from 'lucide-react';
+import { adminVerifyIssue, escalateIssue, fetchIssueById, updateIssuePriority, uploadResolvedIssuePhoto, verifyIssue, submitIssueFeedback } from '@/lib/api.js';
 import { getCategoryLabel } from '@/lib/categoryLabel.js';
+import { cn } from '@/lib/utils.js';
 
 const IssueDetail = () => {
     const { id } = useParams();
     const { t, language } = useTranslation();
-    const { isAdmin } = useAuth();
+    const { user, isAdmin } = useAuth();
     const [verified, setVerified] = useState(null);
     const [issue, setIssue] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [adminVerifying, setAdminVerifying] = useState(false);
+    const [updatingPriority, setUpdatingPriority] = useState(false);
+    const [escalating, setEscalating] = useState(false);
+    const [submittingFeedback, setSubmittingFeedback] = useState(false);
+
+    const [ratingDraft, setRatingDraft] = useState(0);
+    const [feedbackComment, setFeedbackComment] = useState('');
+
+    const [priorityDraft, setPriorityDraft] = useState('p3');
+    const [priorityNote, setPriorityNote] = useState('');
+    const [escalationLevel, setEscalationLevel] = useState('senior-staff');
+    const [escalationReason, setEscalationReason] = useState('');
+    const [escalationNote, setEscalationNote] = useState('');
 
     useEffect(() => {
         let isMounted = true;
@@ -37,6 +51,8 @@ const IssueDetail = () => {
                 const response = await fetchIssueById(id);
                 if (isMounted) {
                     setIssue(response.issue);
+                    setPriorityDraft(response.issue?.priority || 'p3');
+                    setEscalationLevel(response.issue?.escalationLevel || 'senior-staff');
                 }
             } catch (loadError) {
                 if (isMounted) {
@@ -65,6 +81,75 @@ const IssueDetail = () => {
             setIssue(response.issue);
         } catch (verificationError) {
             setError(verificationError.message);
+        }
+    };
+
+    const handleFeedbackSubmit = async () => {
+        if (ratingDraft === 0) return;
+        setSubmittingFeedback(true);
+        setError('');
+
+        try {
+            const response = await submitIssueFeedback(id, {
+                rating: ratingDraft,
+                comment: feedbackComment,
+            });
+            setIssue(response.issue);
+        } catch (fError) {
+            setError(fError.message);
+        } finally {
+            setSubmittingFeedback(false);
+        }
+    };
+
+    const handlePriorityUpdate = async () => {
+        if (!issue) {
+            return;
+        }
+
+        setUpdatingPriority(true);
+        setError('');
+
+        try {
+            const response = await updateIssuePriority(issue.id, {
+                priority: priorityDraft,
+                note: priorityNote.trim() || undefined,
+            });
+            setIssue(response.issue);
+            setPriorityNote('');
+        } catch (priorityError) {
+            setError(priorityError.message);
+        } finally {
+            setUpdatingPriority(false);
+        }
+    };
+
+    const handleEscalation = async () => {
+        if (!issue) {
+            return;
+        }
+        if (escalationReason.trim().length < 4) {
+            setError('Escalation reason must be at least 4 characters.');
+            return;
+        }
+
+        setEscalating(true);
+        setError('');
+
+        try {
+            const response = await escalateIssue(issue.id, {
+                toLevel: escalationLevel,
+                reason: escalationReason.trim(),
+                note: escalationNote.trim() || undefined,
+                priorityOverride: priorityDraft,
+            });
+            setIssue(response.issue);
+            setEscalationReason('');
+            setEscalationNote('');
+        } catch (escalationError) {
+            setError(escalationError.message);
+        } finally {
+            setEscalating(false);
         }
     };
 
@@ -161,6 +246,7 @@ const IssueDetail = () => {
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                         <StatusBadge status={issue.status} />
                         <Badge variant="outline">{getCategoryLabel(issue.category, t)}</Badge>
+                        <Badge variant="secondary">Priority: {(issue.priority || 'p3').toUpperCase()}</Badge>
                         {issue.adminVerified ? (
                             <Badge variant="secondary" className="gap-1">
                                 <ShieldCheck className="h-3 w-3" />
@@ -217,6 +303,57 @@ const IssueDetail = () => {
                                     />
                                 </div>
                             </div>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                                <Select value={priorityDraft} onValueChange={setPriorityDraft}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Priority" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="p1">P1</SelectItem>
+                                        <SelectItem value="p2">P2</SelectItem>
+                                        <SelectItem value="p3">P3</SelectItem>
+                                        <SelectItem value="p4">P4</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Input
+                                    value={priorityNote}
+                                    onChange={(event) => setPriorityNote(event.target.value)}
+                                    placeholder="Priority update note"
+                                />
+                                <Button onClick={handlePriorityUpdate} disabled={updatingPriority}>
+                                    {updatingPriority ? 'Updating Priority...' : 'Update Priority'}
+                                </Button>
+                            </div>
+                            <div className="space-y-2 rounded-lg border p-3">
+                                <p className="text-sm font-medium">Manual Escalation</p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <Select value={escalationLevel} onValueChange={setEscalationLevel}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Escalate to" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="senior-staff">Senior Staff</SelectItem>
+                                            <SelectItem value="department-head">Department Head</SelectItem>
+                                            <SelectItem value="commissioner">Commissioner</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        value={escalationReason}
+                                        onChange={(event) => setEscalationReason(event.target.value)}
+                                        placeholder="Reason (required)"
+                                    />
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <Input
+                                        value={escalationNote}
+                                        onChange={(event) => setEscalationNote(event.target.value)}
+                                        placeholder="Escalation note (optional)"
+                                    />
+                                    <Button onClick={handleEscalation} disabled={escalating}>
+                                        {escalating ? 'Escalating...' : 'Escalate Issue'}
+                                    </Button>
+                                </div>
+                            </div>
                             <p className="text-xs text-muted-foreground">
                                 Upload a resolution photo for before/after proof and mark resolved issues as admin-verified.
                             </p>
@@ -250,6 +387,24 @@ const IssueDetail = () => {
                     </CardContent>
                 </Card>
 
+                {Array.isArray(issue.escalationHistory) && issue.escalationHistory.length > 0 ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Escalation History</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                            {issue.escalationHistory.map((entry, index) => (
+                                <div key={`${entry.timestamp}-${index}`} className="rounded-md border p-3 text-sm">
+                                    <p className="font-medium">{entry.fromLevel}{' -> '}{entry.toLevel}</p>
+                                    <p className="text-muted-foreground">Reason: {entry.reason}</p>
+                                    {entry.note ? <p className="text-muted-foreground">Note: {entry.note}</p> : null}
+                                    <p className="text-xs text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
+                ) : null}
+
                 {hasCoordinates ? (
                     <Card>
                         <CardHeader>
@@ -276,9 +431,29 @@ const IssueDetail = () => {
 
                 {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
+                {issue.citizenFeedback ? (
+                    <Card className="bg-primary/5 border-primary/20">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+                                Citizen Feedback
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex gap-1 mb-2">
+                                {[1, 2, 3, 4, 5].map(s => (
+                                    <Star key={s} className={cn("h-4 w-4", s <= issue.citizenFeedback.rating ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
+                                ))}
+                            </div>
+                            <p className="text-sm italic">"{issue.citizenFeedback.comment || 'No comment provided'}"</p>
+                            <p className="text-[10px] text-muted-foreground mt-2 uppercase">Submitted on {new Date(issue.citizenFeedback.submittedAt).toLocaleDateString()}</p>
+                        </CardContent>
+                    </Card>
+                ) : null}
+
                 {issue.status === 'resolved' ? (
                     <Card>
-                        <CardContent className="p-6">
+                        <CardContent className="p-6 space-y-6">
                             {verified === null ? (
                                 <div className="space-y-4 text-center">
                                     <p className="font-semibold">{t('verify.prompt')}</p>
@@ -295,7 +470,38 @@ const IssueDetail = () => {
                                     </div>
                                 </div>
                             ) : (
-                                <p className="text-center font-medium text-secondary">{t('verify.thanks')}</p>
+                                <div className="space-y-4">
+                                    <p className="text-center font-medium text-secondary">{t('verify.thanks')}</p>
+                                    
+                                    {!issue.citizenFeedback && (
+                                        <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+                                            <p className="text-sm font-semibold text-center">How satisfied are you with the resolution?</p>
+                                            <div className="flex justify-center gap-2">
+                                                {[1, 2, 3, 4, 5].map(s => (
+                                                    <button 
+                                                        key={s} 
+                                                        onClick={() => setRatingDraft(s)}
+                                                        className="hover:scale-110 transition-transform"
+                                                    >
+                                                        <Star className={cn("h-8 w-8", s <= ratingDraft ? "text-amber-500 fill-amber-500" : "text-slate-300")} />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <Input 
+                                                placeholder="Any additional feedback? (optional)" 
+                                                value={feedbackComment}
+                                                onChange={(e) => setFeedbackComment(e.target.value)}
+                                            />
+                                            <Button 
+                                                className="w-full" 
+                                                disabled={ratingDraft === 0 || submittingFeedback}
+                                                onClick={handleFeedbackSubmit}
+                                            >
+                                                {submittingFeedback ? 'Submitting...' : 'Submit Feedback'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </CardContent>
                     </Card>

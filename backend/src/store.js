@@ -156,3 +156,11 @@ export async function readOtpCodes() {
 export async function writeOtpCodes(otpCodes) {
     await replaceCollection('otpCodes', dedupeById(otpCodes, 'otp'));
 }
+
+export async function readTasks() {
+    return readCollection('tasks');
+}
+
+export async function writeTasks(tasks) {
+    await replaceCollection('tasks', dedupeById(tasks, 'task'));
+}

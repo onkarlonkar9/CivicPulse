@@ -2,14 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY backend/package*.json ./backend/
-RUN npm --prefix ./backend ci --omit=dev
+COPY package*.json ./
+RUN npm ci --omit=dev
 
-COPY backend ./backend
-COPY frontend/src/data ./frontend/src/data
-COPY frontend/public/pune-admin-wards.geojson ./frontend/public/pune-admin-wards.geojson
-
-WORKDIR /app/backend
+COPY . ./
 
 EXPOSE 4000
 

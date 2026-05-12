@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from '@/contexts/LanguageContext.jsx';
+import { useTranslation } from '@/contexts/useTranslation.js';
 import IssueCard from '@/components/IssueCard.jsx';
 import StatusProgress from '@/components/StatusProgress.jsx';
 import { Button } from '@/components/ui/button.jsx';
