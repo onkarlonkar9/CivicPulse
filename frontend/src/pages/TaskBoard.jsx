@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx';
 import { assignTask, fetchEmployees, fetchMeta, fetchMyTasks, updateTaskStatus } from '@/lib/api.js';
+import { mapBackendFieldErrors } from '@/lib/formErrors.js';
 
 const TASK_STATUSES = ['unassigned', 'assigned', 'in_progress', 'blocked', 'completed', 'cancelled'];
 
@@ -26,6 +27,7 @@ export default function TaskBoard() {
     const [pendingStatuses, setPendingStatuses] = useState({});
     const [pendingAssignees, setPendingAssignees] = useState({});
     const [updatingTaskId, setUpdatingTaskId] = useState('');
+    const [taskFieldErrors, setTaskFieldErrors] = useState({});
 
     useEffect(() => {
         let active = true;
@@ -114,6 +116,7 @@ export default function TaskBoard() {
         try {
             setError('');
             setMessage('');
+            setTaskFieldErrors((current) => ({ ...current, [task.id]: {} }));
             setUpdatingTaskId(task.id);
             const response = await updateTaskStatus(task.id, { status: nextStatus });
             setTasks((current) => current.map((entry) => (entry.id === task.id ? { ...entry, ...response.task, issue: response.issue || entry.issue } : entry)));
@@ -124,6 +127,10 @@ export default function TaskBoard() {
             });
             setMessage(`Updated ${task.id} to ${nextStatus}.`);
         } catch (updateError) {
+            setTaskFieldErrors((current) => ({
+                ...current,
+                [task.id]: mapBackendFieldErrors(updateError, { status: 'status', note: 'note' }),
+            }));
             setError(updateError.message);
         } finally {
             setUpdatingTaskId('');
@@ -138,6 +145,7 @@ export default function TaskBoard() {
         try {
             setError('');
             setMessage('');
+            setTaskFieldErrors((current) => ({ ...current, [task.id]: {} }));
             setUpdatingTaskId(task.id);
             const response = await assignTask(task.id, { employeeId, expectedUpdatedAt: task.updatedAt });
             setTasks((current) => current.map((entry) => (entry.id === task.id ? { ...entry, ...response.task } : entry)));
@@ -148,6 +156,10 @@ export default function TaskBoard() {
             });
             setMessage(`Assigned ${task.id} to ${response.task?.assignedToEmployeeName || 'employee'}.`);
         } catch (assignError) {
+            setTaskFieldErrors((current) => ({
+                ...current,
+                [task.id]: mapBackendFieldErrors(assignError, { employeeId: 'employeeId', expectedUpdatedAt: 'expectedUpdatedAt' }),
+            }));
             setError(assignError.message);
         } finally {
             setUpdatingTaskId('');
@@ -231,6 +243,7 @@ export default function TaskBoard() {
                         <div className="grid gap-3 md:grid-cols-2">
                             {filteredTasks.map((task) => {
                                 const eligibleEmployees = getEligibleEmployees(task);
+                                const fieldErrors = taskFieldErrors[task.id] || {};
                                 return (
                                     <div key={task.id} className="rounded-lg border p-3">
                                         <div className="flex items-center justify-between gap-2">
@@ -260,6 +273,7 @@ export default function TaskBoard() {
                                                 Apply
                                             </Button>
                                         </div>
+                                        {fieldErrors.status ? <p className="mt-1 text-xs text-destructive">{fieldErrors.status}</p> : null}
 
                                         {['admin', 'super-admin'].includes(user?.role) ? (
                                             <div className="mt-2 flex items-center gap-2">
@@ -279,6 +293,8 @@ export default function TaskBoard() {
                                                 </Button>
                                             </div>
                                         ) : null}
+                                        {fieldErrors.employeeId ? <p className="mt-1 text-xs text-destructive">{fieldErrors.employeeId}</p> : null}
+                                        {fieldErrors.expectedUpdatedAt ? <p className="mt-1 text-xs text-destructive">{fieldErrors.expectedUpdatedAt}</p> : null}
                                     </div>
                                 );
                             })}

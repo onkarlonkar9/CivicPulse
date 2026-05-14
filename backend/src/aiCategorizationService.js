@@ -12,7 +12,7 @@ if (config.anthropicApiKey) {
 }
 
 let gemini = null;
-if (config.geminiApiKey) {
+if (config.geminiApiKey && ['auto', 'gemini'].includes(config.aiCategoryProvider)) {
     const genAI = new GoogleGenerativeAI(config.geminiApiKey);
     gemini = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 }
@@ -27,7 +27,27 @@ function keywordFallback(description = '') {
 }
 
 export async function suggestCategory({ description, imagePath }) {
-    // Prefer Gemini (Free Tier) if available
+    const provider = config.aiCategoryProvider;
+
+    if (provider === 'fallback') {
+        return keywordFallback(description);
+    }
+
+    if (provider === 'anthropic') {
+        if (anthropic) {
+            return suggestWithAnthropic({ description, imagePath });
+        }
+        return keywordFallback(description);
+    }
+
+    if (provider === 'gemini') {
+        if (gemini) {
+            return suggestWithGemini({ description, imagePath });
+        }
+        return keywordFallback(description);
+    }
+
+    // auto: Gemini -> Anthropic -> fallback
     if (gemini) {
         return suggestWithGemini({ description, imagePath });
     }
@@ -36,8 +56,6 @@ export async function suggestCategory({ description, imagePath }) {
         return suggestWithAnthropic({ description, imagePath });
     }
 
-    // Fallback for development without any API key
-    console.warn('[AI] No AI API keys configured, using keyword fallback');
     return keywordFallback(description);
 }
 
@@ -83,13 +101,18 @@ Only return the JSON object, no other text.`;
             provider: 'gemini',
         };
     } catch (error) {
-        console.error('[AI] Gemini suggestion failed:', error);
-
-        // Disable Gemini during this process if key is invalid to avoid repeated hard failures.
+        const message = String(error?.message || '');
+        const details = Array.isArray(error?.errorDetails) ? error.errorDetails : [];
+        const hasInvalidKeyReason = details.some((entry) => entry?.reason === 'API_KEY_INVALID');
         const isInvalidApiKey = error?.status === 400
-            && String(error?.message || '').includes('API key not valid');
+            && (message.includes('API key not valid') || hasInvalidKeyReason);
+
+        // Disable Gemini during this process if key is invalid to avoid repeated hard failures/log spam.
         if (isInvalidApiKey) {
             gemini = null;
+            console.warn('[AI] Gemini API key invalid. Gemini disabled for this process; using fallback provider.');
+        } else {
+            console.error('[AI] Gemini suggestion failed:', error);
         }
 
         if (anthropic) return suggestWithAnthropic({ description, imagePath });

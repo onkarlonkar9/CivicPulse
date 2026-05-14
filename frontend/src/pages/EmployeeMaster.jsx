@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx';
 import { createEmployee, fetchEmployees, fetchMeta, updateEmployee } from '@/lib/api.js';
+import { mapBackendFieldErrors } from '@/lib/formErrors.js';
 
 const initialForm = {
     name: '',
@@ -44,6 +45,7 @@ export default function EmployeeMaster() {
     const [form, setForm] = useState(initialForm);
     const [selectedWardIds, setSelectedWardIds] = useState([]);
     const [selectedCategories, setSelectedCategories] = useState([]);
+    const [fieldErrors, setFieldErrors] = useState({});
 
     useEffect(() => {
         let active = true;
@@ -105,6 +107,20 @@ export default function EmployeeMaster() {
         setSaving(true);
         setError('');
         setMessage('');
+        setFieldErrors({});
+
+        const nextFieldErrors = {};
+        if (!form.name.trim()) nextFieldErrors.name = 'Name is required';
+        if (!form.designation.trim()) nextFieldErrors.designation = 'Designation is required';
+        if (!form.password.trim()) nextFieldErrors.password = 'Password is required';
+        if (!form.email.trim() && !form.phone.trim()) nextFieldErrors.email = 'Phone or email is required';
+        if (selectedWardIds.length === 0) nextFieldErrors.assignedWardIds = 'Select at least one ward';
+        if (selectedCategories.length === 0) nextFieldErrors.taskCategories = 'Select at least one task category';
+        if (Object.keys(nextFieldErrors).length > 0) {
+            setFieldErrors(nextFieldErrors);
+            setSaving(false);
+            return;
+        }
 
         try {
             const payload = {
@@ -117,8 +133,18 @@ export default function EmployeeMaster() {
             setForm(initialForm);
             setSelectedWardIds([]);
             setSelectedCategories([]);
+            setFieldErrors({});
             setMessage('Employee created successfully.');
         } catch (createError) {
+            setFieldErrors(mapBackendFieldErrors(createError, {
+                name: 'name',
+                designation: 'designation',
+                email: 'email',
+                phone: 'phone',
+                password: 'password',
+                assignedWardIds: 'assignedWardIds',
+                taskCategories: 'taskCategories',
+            }));
             setError(createError.message);
         } finally {
             setSaving(false);
@@ -189,9 +215,13 @@ export default function EmployeeMaster() {
                     <h2 className="text-lg font-semibold">Create Employee</h2>
 
                     <div className="grid gap-3 md:grid-cols-2">
-                        <Input placeholder="Full name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+                        <div>
+                            <Input placeholder="Full name" value={form.name} onChange={(event) => { setForm((current) => ({ ...current, name: event.target.value })); setFieldErrors((current) => ({ ...current, name: '' })); }} className={fieldErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                            {fieldErrors.name ? <p className="mt-1 text-xs text-destructive">{fieldErrors.name}</p> : null}
+                        </div>
                         <Input placeholder="Employee code auto-generated (EMP-XXXX)" value="Auto-generated on create" disabled />
-                        <Select value={form.designation} onValueChange={(value) => setForm((current) => ({ ...current, designation: value }))}>
+                        <div>
+                            <Select value={form.designation} onValueChange={(value) => { setForm((current) => ({ ...current, designation: value })); setFieldErrors((current) => ({ ...current, designation: '' })); }}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select designation" />
                             </SelectTrigger>
@@ -201,9 +231,20 @@ export default function EmployeeMaster() {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Input placeholder="Email (optional)" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
-                        <Input placeholder="Phone (optional)" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
-                        <Input placeholder="Temporary password" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
+                            {fieldErrors.designation ? <p className="mt-1 text-xs text-destructive">{fieldErrors.designation}</p> : null}
+                        </div>
+                        <div>
+                            <Input placeholder="Email (optional)" value={form.email} onChange={(event) => { setForm((current) => ({ ...current, email: event.target.value })); setFieldErrors((current) => ({ ...current, email: '' })); }} className={fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                            {fieldErrors.email ? <p className="mt-1 text-xs text-destructive">{fieldErrors.email}</p> : null}
+                        </div>
+                        <div>
+                            <Input placeholder="Phone (optional)" value={form.phone} onChange={(event) => { setForm((current) => ({ ...current, phone: event.target.value })); setFieldErrors((current) => ({ ...current, phone: '' })); }} className={fieldErrors.phone ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                            {fieldErrors.phone ? <p className="mt-1 text-xs text-destructive">{fieldErrors.phone}</p> : null}
+                        </div>
+                        <div>
+                            <Input placeholder="Temporary password" type="password" value={form.password} onChange={(event) => { setForm((current) => ({ ...current, password: event.target.value })); setFieldErrors((current) => ({ ...current, password: '' })); }} className={fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                            {fieldErrors.password ? <p className="mt-1 text-xs text-destructive">{fieldErrors.password}</p> : null}
+                        </div>
                     </div>
 
                     <div className="space-y-2">
@@ -223,6 +264,7 @@ export default function EmployeeMaster() {
                                 );
                             })}
                         </div>
+                        {fieldErrors.assignedWardIds ? <p className="text-xs text-destructive">{fieldErrors.assignedWardIds}</p> : null}
                     </div>
 
                     <div className="space-y-2">
@@ -242,6 +284,7 @@ export default function EmployeeMaster() {
                                 );
                             })}
                         </div>
+                        {fieldErrors.taskCategories ? <p className="text-xs text-destructive">{fieldErrors.taskCategories}</p> : null}
                     </div>
 
                     <Button onClick={create} disabled={saving}>

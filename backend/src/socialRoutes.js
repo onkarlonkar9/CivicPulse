@@ -49,6 +49,12 @@ async function getAuthorMap(authorIds) {
 export function registerSocialRoutes(app) {
     app.get('/api/issues/:id/comments', async (req, res) => {
         try {
+            const issue = await getIssueById(req.params.id);
+            if (!issue) {
+                res.status(404).json({ message: 'Issue not found' });
+                return;
+            }
+
             const commentsCollection = await getCollection('comments');
             const comments = await commentsCollection
                 .find({ issueId: req.params.id })
@@ -222,6 +228,12 @@ export function registerSocialRoutes(app) {
 
     app.get('/api/issues/:id/votes', async (req, res) => {
         try {
+            const issue = await getIssueById(req.params.id);
+            if (!issue) {
+                res.status(404).json({ message: 'Issue not found' });
+                return;
+            }
+
             const issueVotes = await getCollection('issueVotes');
             const [upvotes, downvotes] = await Promise.all([
                 issueVotes.countDocuments({ issueId: req.params.id, voteType: 'upvote' }),

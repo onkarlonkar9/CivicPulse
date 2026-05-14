@@ -1,10 +1,11 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
+dotenv.config({ path: path.join(rootDir, '.env') });
 
 function normalizeEnv(value) {
     const normalized = String(value ?? '').trim();
@@ -31,7 +32,13 @@ function parseBooleanEnv(value, defaultValue = false) {
 
 export const config = {
     port: Number(process.env.PORT || 4000),
-    adminBootstrapSecret: process.env.ADMIN_BOOTSTRAP_SECRET || 'change-this-admin-secret',
+    adminBootstrapSecret: (() => {
+        const secret = process.env.ADMIN_BOOTSTRAP_SECRET;
+        if (!secret) {
+            throw new Error('FATAL: ADMIN_BOOTSTRAP_SECRET environment variable is required but not set. Cannot start server.');
+        }
+        return secret;
+    })(),
     otp: {
         exposeDevOtp: parseBooleanEnv(process.env.OTP_EXPOSE_DEV_CODE, false),
         sms: {
@@ -60,4 +67,5 @@ export const config = {
     otpCodesFile: path.join(rootDir, 'data', 'otp-codes.json'),
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     geminiApiKey: process.env.GEMINI_API_KEY || '',
+    aiCategoryProvider: normalizeEnv(process.env.AI_CATEGORY_PROVIDER || 'auto').toLowerCase(),
 };

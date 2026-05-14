@@ -1,5 +1,5 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+﻿import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -11,6 +11,21 @@ export default defineConfig(() => ({
         port: 8080,
         hmr: {
             overlay: false,
+        },
+        proxy: {
+            "/api": {
+                target: "http://localhost:4000",
+                changeOrigin: true,
+            },
+            "/uploads": {
+                target: "http://localhost:4000",
+                changeOrigin: true,
+            },
+            "/ws": {
+                target: "ws://localhost:4000",
+                ws: true,
+                changeOrigin: true,
+            },
         },
     },
     plugins: [react()],

@@ -16,13 +16,16 @@ import { CheckCircle2, ArrowLeft, ArrowRight, Camera, Home, MapPin, Maximize2, I
 import { cn } from '@/lib/utils.js';
 import { createIssue, fetchMeta, suggestCategoryAPI } from '@/lib/api.js';
 import { getCategoryLabel } from '@/lib/categoryLabel.js';
+import { mapBackendFieldErrors } from '@/lib/formErrors.js';
 import imageCompression from 'browser-image-compression';
+import { useAuth } from '@/contexts/useAuth.js';
 
 const REDIRECT_SECONDS = 4;
 
 const ReportIssue = () => {
     const { t, language } = useTranslation();
     const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
 
     const [step, setStep] = useState(1);
     const [location, setLocation] = useState(null);
@@ -42,6 +45,7 @@ const ReportIssue = () => {
     const [ticketId, setTicketId] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState({});
     const [duplicateIssues, setDuplicateIssues] = useState([]);
     const [wardError, setWardError] = useState('');
     const [isDetectingWard, setIsDetectingWard] = useState(false);
@@ -130,6 +134,7 @@ const ReportIssue = () => {
         setLocation({ lat, lng });
         setDetectedWard(null);
         setWardError('');
+        setFieldErrors((current) => ({ ...current, location: '' }));
         setIsDetectingWard(true);
 
         try {
@@ -203,9 +208,27 @@ const ReportIssue = () => {
             return;
         }
 
+        if (!isAuthenticated) {
+            setSubmitError('Please login to submit an issue report.');
+            return;
+        }
+
         setSubmitting(true);
         setSubmitError('');
+        setFieldErrors({});
         setDuplicateIssues([]);
+
+        const nextFieldErrors = {};
+        if (!location) nextFieldErrors.location = 'Please select location on map';
+        if (!category) nextFieldErrors.category = 'Please select an issue category';
+        if (photoFiles.length === 0) nextFieldErrors.photos = 'At least one photo is required';
+        if (description.trim().length > 0 && description.trim().length < 8) nextFieldErrors.description = 'Description must be at least 8 characters';
+        if (locationDescription.trim().length > 200) nextFieldErrors.locationDescription = 'Location description can be up to 200 characters';
+        if (Object.keys(nextFieldErrors).length > 0) {
+            setFieldErrors(nextFieldErrors);
+            setSubmitting(false);
+            return;
+        }
 
         const formData = new FormData();
         const normalizedDescription = description.trim();
@@ -235,6 +258,13 @@ const ReportIssue = () => {
                 ? 'Unable to reach the server. Please check your internet connection and try again.'
                 : error.message;
             setSubmitError(message);
+            setFieldErrors(mapBackendFieldErrors(error, {
+                latitude: 'location',
+                longitude: 'location',
+                category: 'category',
+                description: 'description',
+                locationDescription: 'locationDescription',
+            }));
             setDuplicateIssues(error.payload?.duplicates || []);
         }
         finally {
@@ -255,6 +285,7 @@ const ReportIssue = () => {
         setDescription('');
         setSeverity('medium');
         setSubmitError('');
+        setFieldErrors({});
         setDuplicateIssues([]);
         setWardError('');
     };
@@ -359,7 +390,10 @@ const ReportIssue = () => {
                                     <Input
                                         id="location-description"
                                         value={locationDescription}
-                                        onChange={(event) => setLocationDescription(event.target.value)}
+                                        onChange={(event) => {
+                                            setLocationDescription(event.target.value);
+                                            setFieldErrors((current) => ({ ...current, locationDescription: '' }));
+                                        }}
                                         placeholder="Near school, lane, landmark"
                                         maxLength={200}
                                     />
@@ -428,13 +462,18 @@ const ReportIssue = () => {
                                     {wardError}
                                 </div>
                             ) : null}
+                            {fieldErrors.location ? <p className="text-sm text-destructive">{fieldErrors.location}</p> : null}
                         </div>
                     )}
 
                     {step === 2 && (
                         <div className="space-y-4">
                             <h3 className="font-semibold">{t('report.selectCat')}</h3>
-                            <CategoryPicker selected={category} onSelect={setCategory} options={categoryOptions} />
+                            <CategoryPicker selected={category} onSelect={(value) => {
+                                setCategory(value);
+                                setFieldErrors((current) => ({ ...current, category: '' }));
+                            }} options={categoryOptions} />
+                            {fieldErrors.category ? <p className="text-sm text-destructive">{fieldErrors.category}</p> : null}
                         </div>
                     )}
 
@@ -506,6 +545,7 @@ const ReportIssue = () => {
                                 {compressing && (
                                     <p className="text-sm text-muted-foreground mt-2">Compressing images...</p>
                                 )}
+                                {fieldErrors.photos ? <p className="mt-2 text-sm text-destructive">{fieldErrors.photos}</p> : null}
                             </div>
 
                             {isSuggesting && (
@@ -544,10 +584,14 @@ const ReportIssue = () => {
                                 <Label className="mb-2 block">{t('report.addNote')}</Label>
                                 <Textarea
                                     value={description}
-                                    onChange={(event) => setDescription(event.target.value)}
+                                    onChange={(event) => {
+                                        setDescription(event.target.value);
+                                        setFieldErrors((current) => ({ ...current, description: '' }));
+                                    }}
                                     placeholder={t('report.addNote')}
                                     rows={3}
                                 />
+                                {fieldErrors.description ? <p className="mt-1 text-xs text-destructive">{fieldErrors.description}</p> : null}
                             </div>
 
                             <div>
@@ -595,6 +639,7 @@ const ReportIssue = () => {
                                 <p><strong>{t('report.locationSummary')}:</strong> {location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : '-'}</p>
                                 <p><strong>{t('admin.ward')}:</strong> {detectedWard ? (language === 'mr' ? detectedWard.nameMr : detectedWard.nameEn) : '-'}</p>
                                 <p><strong>Location Description:</strong> {locationDescription || '-'}</p>
+                                {fieldErrors.locationDescription ? <p className="text-xs text-destructive">{fieldErrors.locationDescription}</p> : null}
                                 <p><strong>{t('report.categorySummary')}:</strong> {category ? getCategoryLabel(category, t, categoryOptions) : '-'}</p>
                                 <p><strong>{t('report.severity')}:</strong> {severityLabelMap[severity] || severity}</p>
                                 <p><strong>{t('report.photoAttached')}:</strong> {photoPreview.length > 0 ? `${photoPreview.length} photo(s)` : t('common.no')}</p>

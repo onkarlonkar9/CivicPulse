@@ -35,7 +35,9 @@ pipeline {
                         ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${SERVER_IP} '
                             cd ${REMOTE_PATH} &&
                             npm install &&
-                            pm2 start app.js --name node-app || pm2 restart node-app
+                            npm --prefix backend install &&
+                            npm --prefix frontend install &&
+                            pm2 start backend/src/index.js --name civicpulse-api || pm2 restart civicpulse-api
                         '
                     """
                 }
@@ -45,10 +47,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Application deployed successfully!'
+            echo 'Application deployed successfully!'
         }
         failure {
-            echo '❌ Deployment failed.'
+            echo 'Deployment failed.'
         }
     }
 }

@@ -2,7 +2,11 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { readUsers } from './store.js';
 
-const jwtSecret = process.env.JWT_SECRET || 'pune-pulse-dev-secret';
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+    throw new Error('FATAL: JWT_SECRET environment variable is required but not set. Cannot start server.');
+}
 
 export function signToken(user) {
     return jwt.sign(

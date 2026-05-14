@@ -14,6 +14,7 @@ import { AlertTriangle, CheckCircle2, Clock, FileWarning, ListChecks, Users, Bar
 import { assignTask, escalateIssue, fetchAdminStats, fetchEmployees, fetchIssues, fetchMeta, fetchMyTasks, markIssueModerationReviewed, updateIssuePriority, updateIssueStatus, updateTaskStatus } from '@/lib/api.js';
 import { getCategoryLabel } from '@/lib/categoryLabel.js';
 import AdvancedAnalytics from '@/components/AdvancedAnalytics.jsx';
+import { mapBackendFieldErrors } from '@/lib/formErrors.js';
 
 const allStatuses = ['new', 'ack', 'inprog', 'resolved', 'verified', 'closed', 'reopened', 'escalated'];
 const queueTabs = ['all', 'new', 'ack', 'inprog', 'resolved', 'escalated'];
@@ -44,6 +45,8 @@ export default function AdminDashboard() {
     const [pendingTaskStatuses, setPendingTaskStatuses] = useState({});
     const [pendingTaskAssignees, setPendingTaskAssignees] = useState({});
     const [updatingIssueId, setUpdatingIssueId] = useState('');
+    const [issueFieldErrors, setIssueFieldErrors] = useState({});
+    const [taskFieldErrors, setTaskFieldErrors] = useState({});
 
     useEffect(() => {
         let active = true;
@@ -150,12 +153,17 @@ export default function AdminDashboard() {
         try {
             setError('');
             setMessage('');
+            setIssueFieldErrors((current) => ({ ...current, [issueId]: {} }));
             setUpdatingIssueId(issueId);
             const response = await updateIssuePriority(issueId, { priority });
             const updatedIssue = response.issue;
             setIssues((current) => current.map((entry) => (entry.id === issueId ? updatedIssue : entry)));
             setMessage(`Updated ${issueId} priority to ${priority.toUpperCase()}.`);
         } catch (updateError) {
+            setIssueFieldErrors((current) => ({
+                ...current,
+                [issueId]: mapBackendFieldErrors(updateError, { priority: 'priority', note: 'note' }),
+            }));
             setError(updateError.message);
         } finally {
             setUpdatingIssueId('');
@@ -170,6 +178,10 @@ export default function AdminDashboard() {
 
         const reason = escalationReasons[issueId]?.trim() || '';
         if (reason.length < 4) {
+            setIssueFieldErrors((current) => ({
+                ...current,
+                [issueId]: { ...(current[issueId] || {}), escalationReason: 'Escalation reason must be at least 4 characters.' },
+            }));
             setError('Escalation reason must be at least 4 characters.');
             return;
         }
@@ -180,6 +192,7 @@ export default function AdminDashboard() {
         try {
             setError('');
             setMessage('');
+            setIssueFieldErrors((current) => ({ ...current, [issueId]: {} }));
             setUpdatingIssueId(issueId);
             const response = await escalateIssue(issueId, {
                 toLevel,
@@ -191,6 +204,15 @@ export default function AdminDashboard() {
             setEscalationReasons((current) => ({ ...current, [issueId]: '' }));
             setMessage(`Escalated ${issueId} to ${toLevel}.`);
         } catch (escalationError) {
+            setIssueFieldErrors((current) => ({
+                ...current,
+                [issueId]: mapBackendFieldErrors(escalationError, {
+                    toLevel: 'escalationLevel',
+                    reason: 'escalationReason',
+                    note: 'escalationNote',
+                    priorityOverride: 'priority',
+                }),
+            }));
             setError(escalationError.message);
         } finally {
             setUpdatingIssueId('');
@@ -216,6 +238,7 @@ export default function AdminDashboard() {
         try {
             setError('');
             setMessage('');
+            setIssueFieldErrors((current) => ({ ...current, [issueId]: {} }));
             setUpdatingIssueId(issueId);
             const payload = { status: newStatus };
             if (remarks) {
@@ -247,6 +270,10 @@ export default function AdminDashboard() {
             });
             setMessage(`Updated ${issueId} to ${newStatus}.`);
         } catch (updateError) {
+            setIssueFieldErrors((current) => ({
+                ...current,
+                [issueId]: mapBackendFieldErrors(updateError, { status: 'status', note: 'note' }),
+            }));
             setError(updateError.message);
         } finally {
             setUpdatingIssueId('');
@@ -278,6 +305,7 @@ export default function AdminDashboard() {
         try {
             setError('');
             setMessage('');
+            setTaskFieldErrors((current) => ({ ...current, [task.id]: {} }));
             setUpdatingIssueId(task.id);
             const response = await updateTaskStatus(task.id, { status: nextStatus });
             setTasks((current) => current.map((entry) => (entry.id === task.id ? { ...entry, ...response.task, issue: response.issue || entry.issue } : entry)));
@@ -291,6 +319,10 @@ export default function AdminDashboard() {
             });
             setMessage(`Updated ${task.id} to ${nextStatus}.`);
         } catch (taskError) {
+            setTaskFieldErrors((current) => ({
+                ...current,
+                [task.id]: mapBackendFieldErrors(taskError, { status: 'status', note: 'note' }),
+            }));
             setError(taskError.message);
         } finally {
             setUpdatingIssueId('');
@@ -306,6 +338,7 @@ export default function AdminDashboard() {
         try {
             setError('');
             setMessage('');
+            setTaskFieldErrors((current) => ({ ...current, [task.id]: {} }));
             setUpdatingIssueId(task.id);
             const response = await assignTask(task.id, { employeeId, expectedUpdatedAt: task.updatedAt });
             setTasks((current) => current.map((entry) => (entry.id === task.id ? { ...entry, ...response.task } : entry)));
@@ -316,6 +349,10 @@ export default function AdminDashboard() {
             });
             setMessage(`Assigned ${task.id} to ${response.task?.assignedToEmployeeName || 'employee'}.`);
         } catch (assignError) {
+            setTaskFieldErrors((current) => ({
+                ...current,
+                [task.id]: mapBackendFieldErrors(assignError, { employeeId: 'employeeId', expectedUpdatedAt: 'expectedUpdatedAt' }),
+            }));
             setError(assignError.message);
         } finally {
             setUpdatingIssueId('');
@@ -420,6 +457,7 @@ export default function AdminDashboard() {
                                         {(() => {
                                             const eligibleEmployees = getEligibleEmployeesForTask(task);
                                             const selectedAssignee = pendingTaskAssignees[task.id] || task.assignedToEmployeeId || '';
+                                            const fieldErrors = taskFieldErrors[task.id] || {};
 
                                             return (
                                                 <>
@@ -459,6 +497,7 @@ export default function AdminDashboard() {
                                                 Apply
                                             </Button>
                                         </div>
+                                        {fieldErrors.status ? <p className="mt-1 text-xs text-destructive">{fieldErrors.status}</p> : null}
                                         {['admin', 'super-admin'].includes(user?.role) ? (
                                             <div className="mt-2 flex items-center gap-2">
                                                 <Select
@@ -484,6 +523,8 @@ export default function AdminDashboard() {
                                                 </Button>
                                             </div>
                                         ) : null}
+                                        {fieldErrors.employeeId ? <p className="mt-1 text-xs text-destructive">{fieldErrors.employeeId}</p> : null}
+                                        {fieldErrors.expectedUpdatedAt ? <p className="mt-1 text-xs text-destructive">{fieldErrors.expectedUpdatedAt}</p> : null}
                                         {['admin', 'super-admin'].includes(user?.role) && eligibleEmployees.length === 0 ? (
                                             <p className="mt-1 text-xs text-destructive">No eligible employee for this ward/category.</p>
                                         ) : null}
@@ -550,6 +591,10 @@ export default function AdminDashboard() {
                                 <div className="grid gap-3 md:hidden">
                                     {filteredIssues.map((issue) => (
                                         <div key={issue.id} className="space-y-3 rounded-lg border p-3">
+                                            {(() => {
+                                                const fieldErrors = issueFieldErrors[issue.id] || {};
+                                                return (
+                                                    <>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <p className="font-mono text-[11px] text-muted-foreground">{issue.id}</p>
@@ -594,6 +639,7 @@ export default function AdminDashboard() {
                                                     onChange={(event) => setRemarksByIssue((current) => ({ ...current, [issue.id]: event.target.value }))}
                                                     placeholder="Optional note"
                                                 />
+                                                {fieldErrors.note ? <p className="text-xs text-destructive">{fieldErrors.note}</p> : null}
                                                 <Select
                                                     value={getPendingPriority(issue)}
                                                     onValueChange={(value) => setPendingPriorities((current) => ({ ...current, [issue.id]: value }))}
@@ -631,6 +677,7 @@ export default function AdminDashboard() {
                                                     onChange={(event) => setEscalationReasons((current) => ({ ...current, [issue.id]: event.target.value }))}
                                                     placeholder="Escalation reason"
                                                 />
+                                                {fieldErrors.escalationReason ? <p className="text-xs text-destructive">{fieldErrors.escalationReason}</p> : null}
                                                 <Button
                                                     type="button"
                                                     variant="secondary"
@@ -659,7 +706,11 @@ export default function AdminDashboard() {
                                                 >
                                                     {updatingIssueId === issue.id ? 'Updating...' : 'Apply'}
                                                 </Button>
+                                                {fieldErrors.status ? <p className="text-xs text-destructive">{fieldErrors.status}</p> : null}
                                             </div>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     ))}
                                     {filteredIssues.length === 0 ? (
@@ -787,6 +838,11 @@ export default function AdminDashboard() {
                                                             {updatingIssueId === issue.id ? 'Updating...' : 'Apply'}
                                                         </Button>
                                                     </div>
+                                                    {(() => {
+                                                        const fieldErrors = issueFieldErrors[issue.id] || {};
+                                                        const errorMessage = fieldErrors.status || fieldErrors.note || fieldErrors.escalationReason || fieldErrors.priority;
+                                                        return errorMessage ? <p className="mt-2 text-xs text-destructive">{errorMessage}</p> : null;
+                                                    })()}
                                                 </TableCell>
                                             </TableRow>
                                         ))}

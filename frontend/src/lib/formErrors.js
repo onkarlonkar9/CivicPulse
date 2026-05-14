@@ -20,20 +20,32 @@ function getFirstArrayMessage(value) {
 export function mapBackendFieldErrors(error, fieldMap = {}) {
     const payload = error?.payload;
     const fieldErrors = payload?.errors?.fieldErrors;
+    const errorDetails = Array.isArray(payload?.errorDetails) ? payload.errorDetails : [];
+    const mapped = {};
 
-    if (!fieldErrors || typeof fieldErrors !== 'object') {
-        return {};
+    if (fieldErrors && typeof fieldErrors === 'object') {
+        Object.entries(fieldErrors).forEach(([key, value]) => {
+            const message = getFirstArrayMessage(value);
+            if (!message) {
+                return;
+            }
+
+            const mappedKey = fieldMap[key] || key;
+            mapped[mappedKey] = message;
+        });
     }
 
-    const mapped = {};
-    Object.entries(fieldErrors).forEach(([key, value]) => {
-        const message = getFirstArrayMessage(value);
-        if (!message) {
+    errorDetails.forEach((detail) => {
+        const key = String(detail?.path || '').trim();
+        const message = String(detail?.message || '').trim();
+        if (!key || !message) {
             return;
         }
 
         const mappedKey = fieldMap[key] || key;
-        mapped[mappedKey] = message;
+        if (!mapped[mappedKey]) {
+            mapped[mappedKey] = message;
+        }
     });
 
     return mapped;

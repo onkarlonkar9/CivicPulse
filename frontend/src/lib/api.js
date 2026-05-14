@@ -1,6 +1,6 @@
 import { normalizePhone } from '@/lib/validators.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 function withNormalizedPhone(body) {
     if (!body || typeof body !== 'object') {
@@ -632,7 +632,7 @@ export function createIssuesWebSocket(onEvent) {
     if (!token) {
         return null;
     }
-    const apiUrl = new URL(API_BASE_URL);
+    const apiUrl = new URL(API_BASE_URL, window.location.origin);
     apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
     apiUrl.pathname = '/ws';
     apiUrl.searchParams.set('token', token);

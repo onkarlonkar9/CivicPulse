@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
 import { Database, Download, Plus, RefreshCw, Save, Search, Upload } from 'lucide-react';
 import { fetchWardMaster, syncWardMasterFromUrl, updateWardMaster } from '@/lib/api.js';
+import { mapBackendFieldErrors } from '@/lib/formErrors.js';
 
 function toCsvNumbers(values) {
     return (values || []).join(', ');
@@ -82,6 +83,7 @@ export default function WardMasterAdmin() {
         notes: '',
     });
     const [wards, setWards] = useState([]);
+    const [fieldErrors, setFieldErrors] = useState({});
 
     useEffect(() => {
         let active = true;
@@ -202,6 +204,18 @@ export default function WardMasterAdmin() {
         setSaving(true);
         setError('');
         setMessage('');
+        setFieldErrors({});
+
+        const nextFieldErrors = {};
+        if (!String(wardDataSource.source || '').trim()) nextFieldErrors.source = 'Source is required';
+        if (!String(wardDataSource.url || '').trim()) nextFieldErrors.url = 'Source URL is required';
+        if (!String(wardDataSource.lastVerifiedOn || '').trim()) nextFieldErrors.lastVerifiedOn = 'Last verified date is required';
+        if (wards.length === 0) nextFieldErrors.wards = 'At least one ward is required';
+        if (Object.keys(nextFieldErrors).length > 0) {
+            setFieldErrors(nextFieldErrors);
+            setSaving(false);
+            return;
+        }
 
         try {
             const payload = normalizeWardPayload(wardDataSource, wards);
@@ -210,6 +224,13 @@ export default function WardMasterAdmin() {
             setWards(response.wards || wards);
             setMessage('Ward master updated successfully.');
         } catch (saveError) {
+            setFieldErrors(mapBackendFieldErrors(saveError, {
+                'wardDataSource.source': 'source',
+                'wardDataSource.url': 'url',
+                'wardDataSource.lastVerifiedOn': 'lastVerifiedOn',
+                'wardDataSource.notes': 'notes',
+                wards: 'wards',
+            }));
             setError(saveError.message);
         } finally {
             setSaving(false);
@@ -268,6 +289,7 @@ export default function WardMasterAdmin() {
         setSyncing(true);
         setError('');
         setMessage('');
+        setFieldErrors((current) => ({ ...current, syncUrl: '' }));
 
         try {
             const response = await syncWardMasterFromUrl(syncUrl);
@@ -275,6 +297,7 @@ export default function WardMasterAdmin() {
             setWards(response.wards || wards);
             setMessage(`Synced ${response.wards?.length || 0} wards from URL.`);
         } catch (syncError) {
+            setFieldErrors(mapBackendFieldErrors(syncError, { url: 'syncUrl' }));
             setError(syncError.message);
         } finally {
             setSyncing(false);
@@ -359,15 +382,31 @@ export default function WardMasterAdmin() {
                     <Card className="border-0 shadow-sm">
                         <CardContent className="space-y-4 p-5">
                             <div className="grid gap-3 md:grid-cols-3">
-                                <Input value={wardDataSource.source} onChange={(event) => setWardDataSource((current) => ({ ...current, source: event.target.value }))} placeholder="Source name" />
-                                <Input value={wardDataSource.url} onChange={(event) => setWardDataSource((current) => ({ ...current, url: event.target.value }))} placeholder="Source URL" />
-                                <Input value={wardDataSource.lastVerifiedOn} onChange={(event) => setWardDataSource((current) => ({ ...current, lastVerifiedOn: event.target.value }))} placeholder="YYYY-MM-DD" />
+                                <div>
+                                    <Input value={wardDataSource.source} onChange={(event) => { setWardDataSource((current) => ({ ...current, source: event.target.value })); setFieldErrors((current) => ({ ...current, source: '' })); }} placeholder="Source name" className={fieldErrors.source ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                    {fieldErrors.source ? <p className="mt-1 text-xs text-destructive">{fieldErrors.source}</p> : null}
+                                </div>
+                                <div>
+                                    <Input value={wardDataSource.url} onChange={(event) => { setWardDataSource((current) => ({ ...current, url: event.target.value })); setFieldErrors((current) => ({ ...current, url: '' })); }} placeholder="Source URL" className={fieldErrors.url ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                    {fieldErrors.url ? <p className="mt-1 text-xs text-destructive">{fieldErrors.url}</p> : null}
+                                </div>
+                                <div>
+                                    <Input value={wardDataSource.lastVerifiedOn} onChange={(event) => { setWardDataSource((current) => ({ ...current, lastVerifiedOn: event.target.value })); setFieldErrors((current) => ({ ...current, lastVerifiedOn: '' })); }} placeholder="YYYY-MM-DD" className={fieldErrors.lastVerifiedOn ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                    {fieldErrors.lastVerifiedOn ? <p className="mt-1 text-xs text-destructive">{fieldErrors.lastVerifiedOn}</p> : null}
+                                </div>
                             </div>
-                            <Textarea value={wardDataSource.notes} onChange={(event) => setWardDataSource((current) => ({ ...current, notes: event.target.value }))} placeholder="Verification notes" rows={2} />
+                            <div>
+                                <Textarea value={wardDataSource.notes} onChange={(event) => { setWardDataSource((current) => ({ ...current, notes: event.target.value })); setFieldErrors((current) => ({ ...current, notes: '' })); }} placeholder="Verification notes" rows={2} className={fieldErrors.notes ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                {fieldErrors.notes ? <p className="mt-1 text-xs text-destructive">{fieldErrors.notes}</p> : null}
+                            </div>
                             <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-                                <Input value={syncUrl} onChange={(event) => setSyncUrl(event.target.value)} placeholder="Open-source URL (JSON or GeoJSON)" />
+                                <div>
+                                    <Input value={syncUrl} onChange={(event) => { setSyncUrl(event.target.value); setFieldErrors((current) => ({ ...current, syncUrl: '' })); }} placeholder="Open-source URL (JSON or GeoJSON)" className={fieldErrors.syncUrl ? 'border-destructive focus-visible:ring-destructive' : ''} />
+                                    {fieldErrors.syncUrl ? <p className="mt-1 text-xs text-destructive">{fieldErrors.syncUrl}</p> : null}
+                                </div>
                                 <Button onClick={syncFromUrl} disabled={syncing || !String(syncUrl).trim()}><RefreshCw className="mr-1 h-4 w-4" />{syncing ? 'Syncing...' : 'Sync From URL'}</Button>
                             </div>
+                            {fieldErrors.wards ? <p className="text-xs text-destructive">{fieldErrors.wards}</p> : null}
                         </CardContent>
                     </Card>
 

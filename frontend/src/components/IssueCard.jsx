@@ -1,4 +1,4 @@
-import { Card, CardContent } from '@/components/ui/card.jsx';
+﻿import { Card, CardContent } from '@/components/ui/card.jsx';
 import { useTranslation } from '@/contexts/useTranslation.js';
 import StatusBadge from './StatusBadge.jsx';
 import { MapPin, Clock, AlertCircle, ShieldCheck } from 'lucide-react';

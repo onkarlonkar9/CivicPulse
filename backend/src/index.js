@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'node:path';
 import http from 'node:http';
@@ -53,6 +55,25 @@ const passwordSchema = z.coerce.string().trim().min(12).max(128)
     .regex(/[0-9]/, 'Password must include at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must include at least one special character');
 const nameSchema = z.coerce.string().trim().min(2).max(80);
+
+// Rate limiters for security
+const otpRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 attempts per window
+    message: 'Too many OTP attempts, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => process.env.NODE_ENV === 'development' && process.env.SKIP_RATE_LIMIT === 'true',
+});
+
+const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // 10 attempts per window
+    message: 'Too many login attempts, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => process.env.NODE_ENV === 'development' && process.env.SKIP_RATE_LIMIT === 'true',
+});
 
 const loginIdentifierSchema = z.object({
     identifier: z.coerce.string().trim().min(3).max(100),
@@ -228,6 +249,28 @@ function asyncHandler(handler) {
     return (req, res, next) => {
         Promise.resolve(handler(req, res, next)).catch(next);
     };
+}
+
+function formatIssuePath(path = []) {
+    if (!Array.isArray(path) || path.length === 0) {
+        return '';
+    }
+
+    return path
+        .map((segment) => (typeof segment === 'number' ? String(segment) : segment))
+        .join('.');
+}
+
+function sendValidationError(res, message, zodError) {
+    res.status(400).json({
+        message: message || 'Invalid request payload',
+        errors: zodError.flatten(),
+        errorDetails: zodError.issues.map((issue) => ({
+            path: formatIssuePath(issue.path),
+            message: issue.message,
+            code: issue.code,
+        })),
+    });
 }
 
 function baseUrlFor(req) {
@@ -495,7 +538,7 @@ async function resolveUserFromToken(token) {
         return null;
     }
     try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET || 'pune-pulse-dev-secret');
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
         const users = await readUsers();
         return users.find((entry) => entry.id === payload.sub) || null;
     } catch {
@@ -587,6 +630,7 @@ async function findUserByCredentials({ users, phone, password, roles }) {
     return null;
 }
 
+app.use(helmet()); // Security headers
 app.use(cors((req, callback) => {
     const origin = req.get('origin');
 
@@ -638,7 +682,7 @@ app.post('/api/auth/register', async (req, res) => {
     const parsed = registerSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid registration payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -682,11 +726,11 @@ app.post('/api/auth/register', async (req, res) => {
     });
 });
 
-app.post('/api/auth/citizen/request-register-otp', async (req, res) => {
+app.post('/api/auth/citizen/request-register-otp', otpRateLimiter, async (req, res) => {
     const parsed = registerSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid citizen registration payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -745,11 +789,11 @@ app.post('/api/auth/citizen/request-register-otp', async (req, res) => {
     );
 });
 
-app.post('/api/auth/citizen/verify-register-otp', async (req, res) => {
+app.post('/api/auth/citizen/verify-register-otp', otpRateLimiter, async (req, res) => {
     const parsed = otpVerifySchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid OTP payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -775,11 +819,11 @@ app.post('/api/auth/citizen/verify-register-otp', async (req, res) => {
     }
 });
 
-app.post('/api/auth/citizen/request-login-otp', async (req, res) => {
+app.post('/api/auth/citizen/request-login-otp', loginRateLimiter, async (req, res) => {
     const parsed = loginIdentifierSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid login payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -821,11 +865,11 @@ app.post('/api/auth/citizen/request-login-otp', async (req, res) => {
     );
 });
 
-app.post('/api/auth/citizen/verify-login-otp', async (req, res) => {
+app.post('/api/auth/citizen/verify-login-otp', otpRateLimiter, async (req, res) => {
     const parsed = otpVerifySchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid OTP payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -861,7 +905,7 @@ app.post('/api/auth/login', async (req, res) => {
     const parsed = loginIdentifierSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid login payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1023,7 +1067,7 @@ app.get('/api/issues/:id', async (req, res) => {
 app.get('/api/wards/lookup', async (req, res) => {
     const parsed = wardLookupQuerySchema.safeParse(req.query);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid coordinates', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1037,16 +1081,16 @@ app.get('/api/wards/lookup', async (req, res) => {
     res.json({ ward });
 });
 
-app.post('/api/issues', upload.array('photos', 5), asyncHandler(async (req, res) => {
+app.post('/api/issues', requireAuth, upload.array('photos', 5), asyncHandler(async (req, res) => {
     const parsed = createIssueSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid issue payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
     const issues = await readIssues();
-    const user = await getUserFromRequest(req);
+    const user = req.user;
     const { description, category, severity, anonymous, latitude, longitude, locationDescription } = parsed.data;
     const moderation = moderateText(`${description}\n${locationDescription || ''}`);
     if (moderation.status === 'blocked') {
@@ -1235,7 +1279,7 @@ app.get('/api/tasks/my', requireStaff, async (req, res) => {
 app.patch('/api/tasks/:id/status', requireStaff, async (req, res) => {
     const parsed = taskStatusSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid task status payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1323,7 +1367,7 @@ app.patch('/api/tasks/:id/status', requireStaff, async (req, res) => {
 app.patch('/api/tasks/:id/assign', requireAdmin, async (req, res) => {
     const parsed = taskAssignSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid task assignment payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1391,7 +1435,7 @@ app.patch('/api/tasks/:id/assign', requireAdmin, async (req, res) => {
 app.post('/api/ai/summarize-issue', requireStaff, async (req, res) => {
     const parsed = summarizeIssueSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid summarize payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1430,7 +1474,7 @@ app.patch('/api/issues/:id/status', requireStaff, async (req, res) => {
     const parsed = statusSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid status payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1503,7 +1547,7 @@ app.post('/api/issues/:id/escalate', requireAdmin, async (req, res) => {
     const parsed = escalationSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid escalation payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1581,7 +1625,7 @@ app.patch('/api/issues/:id/priority', requireAdmin, async (req, res) => {
     const parsed = prioritySchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid priority payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1679,7 +1723,7 @@ app.post('/api/issues/:id/verify', async (req, res) => {
     const parsed = verificationSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid verification payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1724,7 +1768,7 @@ app.post('/api/issues/:id/verify', async (req, res) => {
 app.post('/api/issues/:id/feedback', requireAuth, async (req, res) => {
     const parsed = feedbackSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid feedback payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1827,7 +1871,7 @@ app.post('/api/admin/employees', requireSuperAdmin, async (req, res) => {
     const parsed = createEmployeeSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid employee payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1878,7 +1922,7 @@ app.patch('/api/admin/employees/:id', requireSuperAdmin, async (req, res) => {
     const parsed = updateEmployeeSchema.safeParse(req.body);
 
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid employee update payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1930,7 +1974,7 @@ app.get('/api/users/me/notification-preferences', requireAuth, async (req, res) 
 app.put('/api/users/me/notification-preferences', requireAuth, async (req, res) => {
     const parsed = notificationPreferenceSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid notification preference payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -1961,7 +2005,7 @@ app.get('/api/users/me/saved-issue-filters', requireAuth, async (req, res) => {
 app.post('/api/users/me/saved-issue-filters', requireAuth, async (req, res) => {
     const parsed = issueFilterSaveSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid saved filter payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
     const users = await readUsers();
@@ -2139,7 +2183,7 @@ app.get('/api/admin/ward-master', requireAdmin, async (_req, res) => {
 app.put('/api/admin/ward-master', requireAdmin, async (req, res) => {
     const parsed = wardMasterUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid ward master payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -2151,7 +2195,7 @@ app.put('/api/admin/ward-master', requireAdmin, async (req, res) => {
 app.post('/api/admin/ward-master/sync-url', requireAdmin, async (req, res) => {
     const parsed = wardMasterSyncUrlSchema.safeParse(req.body);
     if (!parsed.success) {
-        res.status(400).json({ message: 'Invalid sync payload', errors: parsed.error.flatten() });
+        sendValidationError(res, '', parsed.error);
         return;
     }
 
@@ -2417,7 +2461,7 @@ app.use((error, _req, res, _next) => {
     console.error(error);
 
     if (error instanceof z.ZodError) {
-        res.status(400).json({ message: 'Invalid request payload', errors: error.flatten() });
+        sendValidationError(res, 'Invalid request payload', error);
         return;
     }
 
@@ -2429,6 +2473,31 @@ await migrateLegacyJsonData();
 setInterval(() => {
     runReminderSweep().catch((error) => console.error('Reminder sweep failed', error.message));
 }, 60 * 60 * 1000);
+
+const gracefulShutdown = async () => {
+    console.log('Shutting down gracefully...');
+    server.close(async () => {
+        console.log('HTTP server closed');
+        // Close WebSocket clients
+        for (const [socket] of wsClients) {
+            if (socket.readyState === socket.OPEN) {
+                socket.close();
+            }
+        }
+        wsClients.clear();
+        console.log('WebSocket connections closed');
+        process.exit(0);
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+        console.error('Forced shutdown after timeout');
+        process.exit(1);
+    }, 10000);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 server.listen(config.port, () => {
     console.log(`Pune Pulse API listening on http://localhost:${config.port}`);

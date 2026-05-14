@@ -107,17 +107,9 @@ export function toPublicIssue(issue, baseUrl) {
         ...safeIssue
     } = issue || {};
 
-    const imageUrl = issue.imageUrl?.startsWith('http')
-        ? issue.imageUrl
-        : issue.imageUrl
-            ? `${baseUrl}${issue.imageUrl}`
-            : null;
+    const imageUrl = issue.imageUrl || null;
 
-    const resolvedImageUrl = issue.resolvedImageUrl?.startsWith('http')
-        ? issue.resolvedImageUrl
-        : issue.resolvedImageUrl
-            ? `${baseUrl}${issue.resolvedImageUrl}`
-            : null;
+    const resolvedImageUrl = issue.resolvedImageUrl || null;
 
     return {
         ...safeIssue,

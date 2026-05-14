@@ -1,5 +1,6 @@
 import { readUsers } from './store.js';
 import { normalizePhone } from './phone.js';
+import { closeMongo } from './mongo.js';
 
 function byNewestFirst(a, b) {
     const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
@@ -45,7 +46,11 @@ async function main() {
     }
 }
 
-main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-});
+main()
+    .catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+    })
+    .finally(async () => {
+        await closeMongo();
+    });
