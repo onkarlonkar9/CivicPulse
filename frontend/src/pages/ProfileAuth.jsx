@@ -214,13 +214,13 @@ const ProfileAuth = () => {
                                         <div className={mode === 'register' ? 'grid gap-3 md:grid-cols-2' : 'space-y-3'}>
                                             {mode === 'register' ? (
                                                 <div className="space-y-1.5">
-                                                    <Label htmlFor="name">{t('common.name')}</Label>
+                                                    <Label htmlFor="name">{t('common.name')} <span className="text-destructive">*</span></Label>
                                                     <Input id="name" value={form.name} onChange={(event) => updateField('name', event.target.value)} placeholder="Your full name" aria-invalid={Boolean(fieldErrors.name)} className={fieldErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                                     {fieldErrors.name ? <p className="text-xs text-destructive">{fieldErrors.name}</p> : null}
                                                 </div>
                                             ) : null}
                                             <div className="space-y-1.5">
-                                                <Label htmlFor="identifier">{mode === 'login' ? 'Phone or Email' : t('common.phone')}</Label>
+                                                <Label htmlFor="identifier">{mode === 'login' ? <>Phone or Email <span className="text-destructive">*</span></> : <>{t('common.phone')} / Email <span className="text-destructive">*</span></>}</Label>
                                                 <Input id="identifier" value={mode === 'login' ? form.identifier : form.phone} onChange={(event) => updateField(mode === 'login' ? 'identifier' : 'phone', event.target.value)} placeholder={mode === 'login' ? 'Enter phone or email' : '10-digit mobile number'} aria-invalid={Boolean(mode === 'login' ? fieldErrors.identifier : (fieldErrors.phone || fieldErrors.identifier))} className={(mode === 'login' ? fieldErrors.identifier : (fieldErrors.phone || fieldErrors.identifier)) ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                                 {mode === 'login' && fieldErrors.identifier ? <p className="text-xs text-destructive">{fieldErrors.identifier}</p> : null}
                                                 {mode === 'register' && (fieldErrors.phone || fieldErrors.identifier) ? <p className="text-xs text-destructive">{fieldErrors.phone || fieldErrors.identifier}</p> : null}
@@ -233,7 +233,7 @@ const ProfileAuth = () => {
                                                 </div>
                                             ) : null}
                                             <div className="space-y-1.5">
-                                                <Label htmlFor="password">{t('common.password')}</Label>
+                                                <Label htmlFor="password">{t('common.password')} <span className="text-destructive">*</span></Label>
                                                 <Input id="password" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} placeholder="Use strong password" aria-invalid={Boolean(fieldErrors.password)} className={fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                                 {fieldErrors.password ? <p className="text-xs text-destructive">{fieldErrors.password}</p> : null}
                                             </div>
@@ -272,7 +272,7 @@ const ProfileAuth = () => {
                                 ) : (
                                     <form className="space-y-3 rounded-xl border bg-slate-50 p-4" onSubmit={verifyOtp}>
                                         <div className="space-y-1.5">
-                                            <Label htmlFor="otp">{t('auth.otpCode')}</Label>
+                                            <Label htmlFor="otp">{t('auth.otpCode')} <span className="text-destructive">*</span></Label>
                                             <Input id="otp" value={form.otp} onChange={(event) => updateField('otp', event.target.value)} maxLength={6} placeholder="Enter 6-digit OTP" aria-invalid={Boolean(fieldErrors.otp)} className={fieldErrors.otp ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                             {fieldErrors.otp ? <p className="text-xs text-destructive">{fieldErrors.otp}</p> : null}
                                         </div>

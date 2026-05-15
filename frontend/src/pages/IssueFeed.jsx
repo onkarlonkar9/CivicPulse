@@ -82,12 +82,12 @@ const IssueFeed = () => {
                 <h1 className="text-2xl font-bold">{t('feed.title')}</h1>
                 <Button variant="outline" size="sm" onClick={() => navigate('/map')} className="gap-2">
                     <Map className="h-4 w-4" />
-                    View Map
+                    {t('issue.openInMap')}
                 </Button>
             </div>
 
             <div className="mb-3">
-                <p className="mb-2 text-sm font-medium text-muted-foreground">Status</p>
+                <p className="mb-2 text-sm font-medium text-muted-foreground">{t('admin.status')}</p>
                 <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
                     {statusFilters.map((status) => (
                         <Button key={status} variant={statusFilter === status ? 'default' : 'outline'} size="sm" className="shrink-0" onClick={() => setStatusFilter(status)}>
@@ -98,7 +98,7 @@ const IssueFeed = () => {
             </div>
 
             <div className="mb-6">
-                <p className="mb-2 text-sm font-medium text-muted-foreground">Category</p>
+                <p className="mb-2 text-sm font-medium text-muted-foreground">{t('admin.category')}</p>
                 <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
                     <Button variant={catFilter === 'all' ? 'secondary' : 'ghost'} size="sm" className="shrink-0" onClick={() => setCatFilter('all')}>
                         {t('feed.all')}

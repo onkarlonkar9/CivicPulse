@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from '@/contexts/useTranslation.js';
 import { useAuth } from '@/contexts/useAuth.js';
@@ -39,6 +39,30 @@ const IssueDetail = () => {
     const [escalationLevel, setEscalationLevel] = useState('senior-staff');
     const [escalationReason, setEscalationReason] = useState('');
     const [escalationNote, setEscalationNote] = useState('');
+    const uiText = {
+        escalationReasonMin: t('issue.escalationReasonMin'),
+        priorityLabel: t('common.priority'),
+        adminVerified: t('issue.adminVerified'),
+        anonymousReport: t('issue.anonymousReport'),
+        priorityNote: t('issue.priorityNote'),
+        updatingPriority: t('issue.updatingPriority'),
+        updatePriority: t('issue.updatePriority'),
+        manualEscalation: t('issue.manualEscalation'),
+        escalateTo: t('issue.escalateTo'),
+        reasonRequired: t('issue.reasonRequired'),
+        escalationNoteOptional: t('issue.escalationNoteOptional'),
+        escalating: t('issue.escalating'),
+        escalateIssue: t('issue.escalateIssue'),
+        escalationHistory: t('issue.escalationHistory'),
+        reason: t('common.reason'),
+        locationMap: t('issue.locationMap'),
+        openInMap: t('issue.openInMap'),
+        citizenFeedback: t('issue.citizenFeedback'),
+        submittedOn: t('issue.submittedOn'),
+        feedbackOptional: t('issue.feedbackOptional'),
+        submitting: t('common.submitting'),
+        submitFeedback: t('issue.submitFeedback'),
+    };
 
     useEffect(() => {
         let isMounted = true;
@@ -129,7 +153,7 @@ const IssueDetail = () => {
             return;
         }
         if (escalationReason.trim().length < 4) {
-            setError('Escalation reason must be at least 4 characters.');
+            setError(uiText.escalationReasonMin);
             return;
         }
 
@@ -219,6 +243,8 @@ const IssueDetail = () => {
 
     const title = language === 'mr' ? issue.titleMr : issue.title;
     const desc = language === 'mr' ? issue.descriptionMr : issue.description;
+    const aiSummary = language === 'mr' ? (issue.aiSummaryMr || issue.aiSummary) : issue.aiSummary;
+    const aiGeneratedLabel = t('common.aiGenerated');
     const ward = language === 'mr' ? issue.wardNameMr : issue.wardName;
     const hasCoordinates = Number.isFinite(issue.lat) && Number.isFinite(issue.lng);
     const mapEmbedUrl = hasCoordinates
@@ -246,17 +272,23 @@ const IssueDetail = () => {
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                         <StatusBadge status={issue.status} />
                         <Badge variant="outline">{getCategoryLabel(issue.category, t)}</Badge>
-                        <Badge variant="secondary">Priority: {(issue.priority || 'p3').toUpperCase()}</Badge>
+                        <Badge variant="secondary">{uiText.priorityLabel}: {(issue.priority || 'p3').toUpperCase()}</Badge>
                         {issue.adminVerified ? (
                             <Badge variant="secondary" className="gap-1">
                                 <ShieldCheck className="h-3 w-3" />
-                                Admin Verified
+                                {uiText.adminVerified}
                             </Badge>
                         ) : null}
                         <span className="font-mono text-xs text-muted-foreground">{issue.id}</span>
                     </div>
                     <h1 className="mb-2 text-2xl font-bold">{title}</h1>
                     <p className="text-sm text-muted-foreground sm:text-base">{desc}</p>
+                    {aiSummary ? (
+                        <div className="mt-2 space-y-1">
+                            <Badge variant="secondary" className="text-[10px]">{aiGeneratedLabel}</Badge>
+                            <p className="text-sm text-muted-foreground">{aiSummary}</p>
+                        </div>
+                    ) : null}
                     {issue.locationDescription ? <p className="mt-2 text-sm text-muted-foreground">{issue.locationDescription}</p> : null}
                     <div className="mt-3 flex items-center gap-1 text-sm text-muted-foreground">
                         <MapPin className="h-4 w-4" />
@@ -265,12 +297,12 @@ const IssueDetail = () => {
                     {issue.reporterName && !issue.anonymous && (
                         <div className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
                             <User className="h-4 w-4" />
-                            Reported by {issue.reporterName}
+                            {t('issue.reportedBy')} {issue.reporterName}
                         </div>
                     )}
                     {issue.anonymous && (
                         <div className="mt-2">
-                            <Badge variant="outline">Anonymous Report</Badge>
+                            <Badge variant="outline">{uiText.anonymousReport}</Badge>
                         </div>
                     )}
                 </div>
@@ -284,7 +316,7 @@ const IssueDetail = () => {
                 {isAdmin ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-lg">Admin Review</CardTitle>
+                            <CardTitle className="text-lg">{t('admin.moderationReview')}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex flex-wrap gap-2">
@@ -292,7 +324,8 @@ const IssueDetail = () => {
                                     onClick={handleAdminVerification}
                                     disabled={adminVerifying || issue.adminVerified || !['resolved', 'verified', 'closed'].includes(issue.status)}
                                 >
-                                    {issue.adminVerified ? 'Already Verified' : adminVerifying ? 'Verifying...' : 'Mark as Verified'}
+                                    {issue.adminVerified ? t('issue.alreadyVerified') : adminVerifying ? t('issue.verifying') : t('issue.markAsVerified')}
+                                    
                                 </Button>
                                 <div className="w-full sm:w-auto">
                                     <Input
@@ -306,7 +339,7 @@ const IssueDetail = () => {
                             <div className="grid gap-2 sm:grid-cols-3">
                                 <Select value={priorityDraft} onValueChange={setPriorityDraft}>
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Priority" />
+                                        <SelectValue placeholder={uiText.priorityLabel} />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="p1">P1</SelectItem>
@@ -318,44 +351,44 @@ const IssueDetail = () => {
                                 <Input
                                     value={priorityNote}
                                     onChange={(event) => setPriorityNote(event.target.value)}
-                                    placeholder="Priority update note"
+                                    placeholder={uiText.priorityNote}
                                 />
                                 <Button onClick={handlePriorityUpdate} disabled={updatingPriority}>
-                                    {updatingPriority ? 'Updating Priority...' : 'Update Priority'}
+                                    {updatingPriority ? uiText.updatingPriority : uiText.updatePriority}
                                 </Button>
                             </div>
                             <div className="space-y-2 rounded-lg border p-3">
-                                <p className="text-sm font-medium">Manual Escalation</p>
+                                <p className="text-sm font-medium">{uiText.manualEscalation}</p>
                                 <div className="grid gap-2 sm:grid-cols-2">
                                     <Select value={escalationLevel} onValueChange={setEscalationLevel}>
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Escalate to" />
+                                            <SelectValue placeholder={uiText.escalateTo} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="senior-staff">Senior Staff</SelectItem>
-                                            <SelectItem value="department-head">Department Head</SelectItem>
-                                            <SelectItem value="commissioner">Commissioner</SelectItem>
+                                            <SelectItem value="senior-staff">{t('issue.escalationLevelSeniorStaff')}</SelectItem>
+                                            <SelectItem value="department-head">{t('issue.escalationLevelDepartmentHead')}</SelectItem>
+                                            <SelectItem value="commissioner">{t('issue.escalationLevelCommissioner')}</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <Input
                                         value={escalationReason}
                                         onChange={(event) => setEscalationReason(event.target.value)}
-                                        placeholder="Reason (required)"
+                                        placeholder={uiText.reasonRequired}
                                     />
                                 </div>
                                 <div className="grid gap-2 sm:grid-cols-2">
                                     <Input
                                         value={escalationNote}
                                         onChange={(event) => setEscalationNote(event.target.value)}
-                                        placeholder="Escalation note (optional)"
+                                        placeholder={uiText.escalationNoteOptional}
                                     />
                                     <Button onClick={handleEscalation} disabled={escalating}>
-                                        {escalating ? 'Escalating...' : 'Escalate Issue'}
+                                        {escalating ? uiText.escalating : uiText.escalateIssue}
                                     </Button>
                                 </div>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Upload a resolution photo for before/after proof and mark resolved issues as admin-verified.
+                                {t('issue.uploadResolutionHelp')}
                             </p>
                         </CardContent>
                     </Card>
@@ -363,7 +396,7 @@ const IssueDetail = () => {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-lg">Status Progress</CardTitle>
+                        <CardTitle className="text-lg">{t('issue.statusProgress')}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <StatusProgress currentStatus={issue.status} estimatedDays={issue.estimatedResolutionDays} />
@@ -390,14 +423,14 @@ const IssueDetail = () => {
                 {Array.isArray(issue.escalationHistory) && issue.escalationHistory.length > 0 ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-lg">Escalation History</CardTitle>
+                            <CardTitle className="text-lg">{uiText.escalationHistory}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             {issue.escalationHistory.map((entry, index) => (
                                 <div key={`${entry.timestamp}-${index}`} className="rounded-md border p-3 text-sm">
                                     <p className="font-medium">{entry.fromLevel}{' -> '}{entry.toLevel}</p>
-                                    <p className="text-muted-foreground">Reason: {entry.reason}</p>
-                                    {entry.note ? <p className="text-muted-foreground">Note: {entry.note}</p> : null}
+                                    <p className="text-muted-foreground">{uiText.reason}: {entry.reason}</p>
+                                    {entry.note ? <p className="text-muted-foreground">{t('issue.note')}: {entry.note}</p> : null}
                                     <p className="text-xs text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
                                 </div>
                             ))}
@@ -408,12 +441,12 @@ const IssueDetail = () => {
                 {hasCoordinates ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-lg">Location Map</CardTitle>
+                            <CardTitle className="text-lg">{uiText.locationMap}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="overflow-hidden rounded-lg border">
                                 <iframe
-                                    title="Issue location map"
+                                    title={t('issue.locationMap')}
                                     src={mapEmbedUrl}
                                     className="h-[240px] w-full sm:h-[300px] lg:h-[360px]"
                                     loading="lazy"
@@ -421,7 +454,7 @@ const IssueDetail = () => {
                             </div>
                             <Button asChild variant="outline" className="w-full gap-2 sm:w-auto">
                                 <a href={mapsOpenUrl} target="_blank" rel="noreferrer">
-                                    Open in Map
+                                    {uiText.openInMap}
                                     <ExternalLink className="h-4 w-4" />
                                 </a>
                             </Button>
@@ -436,7 +469,7 @@ const IssueDetail = () => {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-lg flex items-center gap-2">
                                 <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
-                                Citizen Feedback
+                                {uiText.citizenFeedback}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -445,8 +478,8 @@ const IssueDetail = () => {
                                     <Star key={s} className={cn("h-4 w-4", s <= issue.citizenFeedback.rating ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
                                 ))}
                             </div>
-                            <p className="text-sm italic">"{issue.citizenFeedback.comment || 'No comment provided'}"</p>
-                            <p className="text-[10px] text-muted-foreground mt-2 uppercase">Submitted on {new Date(issue.citizenFeedback.submittedAt).toLocaleDateString()}</p>
+                            <p className="text-sm italic">"{issue.citizenFeedback.comment || t('issue.noCommentProvided')}"</p>
+                            <p className="text-[10px] text-muted-foreground mt-2 uppercase">{uiText.submittedOn} {new Date(issue.citizenFeedback.submittedAt).toLocaleDateString()}</p>
                         </CardContent>
                     </Card>
                 ) : null}
@@ -475,7 +508,7 @@ const IssueDetail = () => {
                                     
                                     {!issue.citizenFeedback && (
                                         <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
-                                            <p className="text-sm font-semibold text-center">How satisfied are you with the resolution?</p>
+                                            <p className="text-sm font-semibold text-center">{t('issue.satisfactionPrompt')}</p>
                                             <div className="flex justify-center gap-2">
                                                 {[1, 2, 3, 4, 5].map(s => (
                                                     <button 
@@ -488,7 +521,7 @@ const IssueDetail = () => {
                                                 ))}
                                             </div>
                                             <Input 
-                                                placeholder="Any additional feedback? (optional)" 
+                                                placeholder={uiText.feedbackOptional} 
                                                 value={feedbackComment}
                                                 onChange={(e) => setFeedbackComment(e.target.value)}
                                             />
@@ -497,7 +530,7 @@ const IssueDetail = () => {
                                                 disabled={ratingDraft === 0 || submittingFeedback}
                                                 onClick={handleFeedbackSubmit}
                                             >
-                                                {submittingFeedback ? 'Submitting...' : 'Submit Feedback'}
+                                                {submittingFeedback ? uiText.submitting : uiText.submitFeedback}
                                             </Button>
                                         </div>
                                     )}
@@ -512,3 +545,5 @@ const IssueDetail = () => {
 };
 
 export default IssueDetail;
+
+

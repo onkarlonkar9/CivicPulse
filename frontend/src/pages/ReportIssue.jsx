@@ -14,13 +14,14 @@ import { findAdminWardByCoordinates } from '@/lib/adminWardLookup.js';
 import { categories as defaultCategories } from '@/data/categories.js';
 import { CheckCircle2, ArrowLeft, ArrowRight, Camera, Home, MapPin, Maximize2, Image, X, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
-import { createIssue, fetchMeta, suggestCategoryAPI } from '@/lib/api.js';
+import { createIssue, detectImageAuthenticityAPI, fetchDuplicateIssuePreview, fetchMeta, suggestCategoryAPI } from '@/lib/api.js';
 import { getCategoryLabel } from '@/lib/categoryLabel.js';
 import { mapBackendFieldErrors } from '@/lib/formErrors.js';
 import imageCompression from 'browser-image-compression';
 import { useAuth } from '@/contexts/useAuth.js';
 
 const REDIRECT_SECONDS = 4;
+const AI_SUGGESTION_MIN_CONFIDENCE = 0.8;
 
 const ReportIssue = () => {
     const { t, language } = useTranslation();
@@ -53,29 +54,140 @@ const ReportIssue = () => {
     const [showFullscreenMap, setShowFullscreenMap] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState(null);
     const [isSuggesting, setIsSuggesting] = useState(false);
+    const [aiSuggestionMessage, setAiSuggestionMessage] = useState('');
+    const [previewDuplicates, setPreviewDuplicates] = useState([]);
+    const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+    const [imageAuthenticity, setImageAuthenticity] = useState(null);
+    const [isCheckingAuthenticity, setIsCheckingAuthenticity] = useState(false);
+    const uiText = {
+        aiLowConfidence: t('report.aiLowConfidence'),
+        aiUnavailable: t('report.aiUnavailable'),
+        aiSuggestionTitle: t('report.aiSuggestionTitle'),
+        aiLooksLike: t('report.aiLooksLike'),
+        aiApply: t('common.apply'),
+        aiLowConfidenceBtn: t('report.aiLowConfidenceBtn'),
+        duplicateChecking: t('report.duplicateChecking'),
+        duplicateFoundTitle: t('report.duplicateFoundTitle'),
+        authenticityChecking: t('report.authenticityChecking'),
+        authenticityReal: t('report.authenticityReal'),
+        authenticityAi: t('report.authenticityAi'),
+        authenticityUnknown: t('report.authenticityUnknown'),
+        authenticityLowConfidence: t('report.authenticityLowConfidence'),
+    };
 
     useEffect(() => {
         if (step !== 3 || (!description && photoFiles.length === 0)) {
+            setAiSuggestion(null);
+            setAiSuggestionMessage('');
             return;
+        }
+
+        const controller = new AbortController();
+        const normalizedDescription = String(description || '').trim().toLowerCase();
+        const firstPhoto = photoFiles[0] || null;
+        const promptKey = `${normalizedDescription}|${firstPhoto?.name || ''}|${firstPhoto?.size || ''}|${firstPhoto?.lastModified || ''}`;
+        const previousPromptKey = window.sessionStorage.getItem('civicpulse_ai_suggest_prompt');
+        if (previousPromptKey === promptKey) {
+            return () => {
+                controller.abort();
+            };
         }
 
         const timer = setTimeout(async () => {
             setIsSuggesting(true);
+            setAiSuggestionMessage('');
             try {
                 const result = await suggestCategoryAPI({
                     description,
-                    photo: photoFiles[0],
+                    photo: firstPhoto,
+                    signal: controller.signal,
+                    timeoutMs: 6000,
                 });
+                window.sessionStorage.setItem('civicpulse_ai_suggest_prompt', promptKey);
                 setAiSuggestion(result);
+                const confidence = Number(result?.confidence || 0);
+                if (!Number.isFinite(confidence) || confidence < AI_SUGGESTION_MIN_CONFIDENCE) {
+                    setAiSuggestionMessage(uiText.aiLowConfidence);
+                }
             } catch (error) {
-                console.error('AI Suggestion failed:', error);
+                if (error?.name !== 'AbortError') {
+                    console.error('AI Suggestion failed:', error);
+                    setAiSuggestionMessage(uiText.aiUnavailable);
+                }
             } finally {
                 setIsSuggesting(false);
             }
         }, 1500);
 
-        return () => clearTimeout(timer);
-    }, [description, photoFiles, step]);
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [description, photoFiles, step, language]);
+
+    useEffect(() => {
+        if (step !== 3 || photoFiles.length === 0) {
+            setImageAuthenticity(null);
+            return;
+        }
+
+        const controller = new AbortController();
+        const firstPhoto = photoFiles[0];
+        const timer = setTimeout(async () => {
+            setIsCheckingAuthenticity(true);
+            try {
+                const result = await detectImageAuthenticityAPI({
+                    photo: firstPhoto,
+                    signal: controller.signal,
+                    timeoutMs: 7000,
+                });
+                setImageAuthenticity(result);
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    setImageAuthenticity(null);
+                }
+            } finally {
+                setIsCheckingAuthenticity(false);
+            }
+        }, 900);
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [step, photoFiles]);
+
+    useEffect(() => {
+        if (step !== 3 || !location || !category) {
+            setPreviewDuplicates([]);
+            return;
+        }
+
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+            setIsCheckingDuplicates(true);
+            try {
+                const response = await fetchDuplicateIssuePreview({
+                    category,
+                    latitude: location.lat,
+                    longitude: location.lng,
+                    signal: controller.signal,
+                });
+                setPreviewDuplicates(Array.isArray(response?.duplicates) ? response.duplicates : []);
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    setPreviewDuplicates([]);
+                }
+            } finally {
+                setIsCheckingDuplicates(false);
+            }
+        }, 700);
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [step, location, category]);
 
     useEffect(() => {
         let isMounted = true;
@@ -408,7 +520,7 @@ const ReportIssue = () => {
 
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-sm font-medium">Map Location</Label>
+                                    <Label className="text-sm font-medium">Map Location <span className="text-destructive">*</span></Label>
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -468,7 +580,7 @@ const ReportIssue = () => {
 
                     {step === 2 && (
                         <div className="space-y-4">
-                            <h3 className="font-semibold">{t('report.selectCat')}</h3>
+                            <h3 className="font-semibold">{t('report.selectCat')} <span className="text-destructive">*</span></h3>
                             <CategoryPicker selected={category} onSelect={(value) => {
                                 setCategory(value);
                                 setFieldErrors((current) => ({ ...current, category: '' }));
@@ -480,7 +592,7 @@ const ReportIssue = () => {
                     {step === 3 && (
                         <div className="space-y-5">
                             <div>
-                                <Label className="mb-3 block text-base font-semibold">{t('report.addPhoto')} (Required) (Max 5)</Label>
+                                <Label className="mb-3 block text-base font-semibold">{t('report.addPhoto')} <span className="text-destructive">*</span> (Max 5)</Label>
                                 
                                 {photoPreview.length > 0 && (
                                     <div className="grid grid-cols-2 gap-3 mb-4">
@@ -555,13 +667,41 @@ const ReportIssue = () => {
                                 </div>
                             )}
 
+                            {isCheckingAuthenticity ? (
+                                <p className="text-xs text-muted-foreground">{uiText.authenticityChecking}</p>
+                            ) : null}
+                            {imageAuthenticity ? (
+                                <div className={cn(
+                                    'rounded-lg border p-3 text-sm',
+                                    imageAuthenticity.label === 'ai_generated'
+                                        ? 'border-amber-300 bg-amber-50'
+                                        : imageAuthenticity.label === 'real'
+                                            ? 'border-emerald-300 bg-emerald-50'
+                                            : 'border-border bg-muted/40'
+                                )}>
+                                    <p className="font-medium">
+                                        {imageAuthenticity.label === 'ai_generated'
+                                            ? uiText.authenticityAi
+                                            : imageAuthenticity.label === 'real'
+                                                ? uiText.authenticityReal
+                                                : uiText.authenticityUnknown}
+                                        {' '}({Math.round(Number(imageAuthenticity.confidence || 0) * 100)}%)
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">{imageAuthenticity.reasoning}</p>
+                                    {Number(imageAuthenticity.confidence || 0) < 0.6 ? (
+                                        <p className="mt-1 text-xs text-muted-foreground">{uiText.authenticityLowConfidence}</p>
+                                    ) : null}
+                                </div>
+                            ) : null}
+
                             {aiSuggestion && aiSuggestion.suggestedCategory && aiSuggestion.suggestedCategory !== category && (
                                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
                                     <div className="flex items-start gap-2">
                                         <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                                         <div className="text-sm">
-                                            <p className="font-semibold text-primary">AI Suggestion</p>
-                                            <p>This looks like <strong>{getCategoryLabel(aiSuggestion.suggestedCategory, t, categoryOptions)}</strong>.</p>
+                                            <p className="font-semibold text-primary">{uiText.aiSuggestionTitle}</p>
+                                            <p>{uiText.aiLooksLike} <strong>{getCategoryLabel(aiSuggestion.suggestedCategory, t, categoryOptions)}</strong>.</p>
+                                            <p className="text-xs text-muted-foreground mt-1">Confidence: {Math.round((Number(aiSuggestion.confidence || 0)) * 100)}%</p>
                                             {aiSuggestion.reasoning && (
                                                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{aiSuggestion.reasoning}</p>
                                             )}
@@ -570,15 +710,38 @@ const ReportIssue = () => {
                                     <Button 
                                         size="sm" 
                                         className="shrink-0"
+                                        disabled={Number(aiSuggestion.confidence || 0) < AI_SUGGESTION_MIN_CONFIDENCE}
                                         onClick={() => {
                                             setCategory(aiSuggestion.suggestedCategory);
                                             setAiSuggestion(null);
                                         }}
                                     >
-                                        Apply
+                                        {Number(aiSuggestion.confidence || 0) < AI_SUGGESTION_MIN_CONFIDENCE ? uiText.aiLowConfidenceBtn : uiText.aiApply}
                                     </Button>
                                 </div>
                             )}
+                            {aiSuggestionMessage ? (
+                                <p className="text-xs text-muted-foreground">{aiSuggestionMessage}</p>
+                            ) : null}
+                            {isCheckingDuplicates ? (
+                                <p className="text-xs text-muted-foreground">{uiText.duplicateChecking}</p>
+                            ) : null}
+                            {previewDuplicates.length > 0 ? (
+                                <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+                                    <p className="font-medium text-amber-900">{uiText.duplicateFoundTitle}</p>
+                                    {previewDuplicates.map((issue) => (
+                                        <button
+                                            key={issue.id}
+                                            type="button"
+                                            onClick={() => navigate(`/issues/${issue.id}`)}
+                                            className="block w-full rounded-md border border-amber-300 bg-white p-2 text-left hover:bg-amber-100"
+                                        >
+                                            <p className="font-semibold">{issue.id}</p>
+                                            <p className="text-xs text-muted-foreground line-clamp-1">{language === 'mr' ? issue.titleMr : issue.title}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : null}
 
                             <div>
                                 <Label className="mb-2 block">{t('report.addNote')}</Label>
@@ -680,3 +843,4 @@ const ReportIssue = () => {
 };
 
 export default ReportIssue;
+

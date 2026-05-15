@@ -152,7 +152,7 @@ export async function createIssue(formData) {
     return parseResponse(response);
 }
 
-export async function suggestCategoryAPI({ description, photo }) {
+export async function suggestCategoryAPI({ description, photo, signal, timeoutMs = 6000 }) {
     const formData = new FormData();
     if (description) {
         formData.append('description', description);
@@ -161,10 +161,80 @@ export async function suggestCategoryAPI({ description, photo }) {
         formData.append('photo', photo);
     }
 
-    const response = await fetch(`${API_BASE_URL}/ai/suggest-category`, {
+    const timeoutController = new AbortController();
+    const timeoutId = window.setTimeout(() => timeoutController.abort(), Math.max(500, Number(timeoutMs) || 6000));
+    let detachExternalAbort = null;
+    if (signal) {
+        if (signal.aborted) {
+            timeoutController.abort();
+        } else {
+            const forwardAbort = () => timeoutController.abort();
+            signal.addEventListener('abort', forwardAbort, { once: true });
+            detachExternalAbort = () => signal.removeEventListener('abort', forwardAbort);
+        }
+    }
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}/ai/suggest-category`, {
+            method: 'POST',
+            headers: withAuthHeaders(),
+            body: formData,
+            signal: timeoutController.signal,
+        });
+    } finally {
+        window.clearTimeout(timeoutId);
+        if (detachExternalAbort) {
+            detachExternalAbort();
+        }
+    }
+    return parseResponse(response);
+}
+
+export async function detectImageAuthenticityAPI({ photo, signal, timeoutMs = 7000 }) {
+    const formData = new FormData();
+    if (photo) {
+        formData.append('photo', photo);
+    }
+
+    const timeoutController = new AbortController();
+    const timeoutId = window.setTimeout(() => timeoutController.abort(), Math.max(500, Number(timeoutMs) || 7000));
+    let detachExternalAbort = null;
+    if (signal) {
+        if (signal.aborted) {
+            timeoutController.abort();
+        } else {
+            const forwardAbort = () => timeoutController.abort();
+            signal.addEventListener('abort', forwardAbort, { once: true });
+            detachExternalAbort = () => signal.removeEventListener('abort', forwardAbort);
+        }
+    }
+
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}/ai/detect-image-authenticity`, {
+            method: 'POST',
+            headers: withAuthHeaders(),
+            body: formData,
+            signal: timeoutController.signal,
+        });
+    } finally {
+        window.clearTimeout(timeoutId);
+        if (detachExternalAbort) {
+            detachExternalAbort();
+        }
+    }
+
+    return parseResponse(response);
+}
+
+export async function fetchDuplicateIssuePreview({ category, latitude, longitude, signal }) {
+    const response = await fetch(`${API_BASE_URL}/issues/duplicate-preview`, {
         method: 'POST',
-        headers: withAuthHeaders(),
-        body: formData,
+        headers: withAuthHeaders({
+            'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ category, latitude, longitude }),
+        signal,
     });
     return parseResponse(response);
 }

@@ -21,6 +21,25 @@ const queueTabs = ['all', 'new', 'ack', 'inprog', 'resolved', 'escalated'];
 
 export default function AdminDashboard() {
     const { t, language } = useTranslation();
+    const uiText = {
+        moderation: t('admin.moderation'),
+        moderationReview: t('admin.moderationReview'),
+        moderationClear: t('admin.moderationClear'),
+        priority: t('common.priority'),
+        latestEscalation: t('admin.latestEscalation'),
+        escalationReason: t('admin.escalationReason'),
+        markReviewed: t('admin.markReviewed'),
+        apply: t('common.apply'),
+        updating: t('common.updating'),
+        escalationLabel: t('admin.escalationLabel'),
+        optionalNote: t('admin.optionalNote'),
+        escalationLevelSeniorStaff: t('issue.escalationLevelSeniorStaff'),
+        escalationLevelDepartmentHead: t('issue.escalationLevelDepartmentHead'),
+        escalationLevelCommissioner: t('issue.escalationLevelCommissioner'),
+        escalate: t('issue.escalateIssue'),
+        noIssuesForFilters: t('admin.noIssuesForFilters'),
+    };
+    const aiGeneratedLabel = t('common.aiGenerated');
     const { user, isAuthenticated, isAdmin, isSuperAdmin } = useAuth();
     const [view, setView] = useState('queue'); // 'queue' or 'analytics'
     const [issues, setIssues] = useState([]);
@@ -182,7 +201,7 @@ export default function AdminDashboard() {
                 ...current,
                 [issueId]: { ...(current[issueId] || {}), escalationReason: 'Escalation reason must be at least 4 characters.' },
             }));
-            setError('Escalation reason must be at least 4 characters.');
+            setError(language === 'mr' ? 'एस्कलेशन कारण किमान 4 अक्षरे असणे आवश्यक आहे.' : 'Escalation reason must be at least 4 characters.');
             return;
         }
 
@@ -494,7 +513,7 @@ export default function AdminDashboard() {
                                                 onClick={() => applyTaskStatus(task)}
                                                 disabled={updatingIssueId === task.id}
                                             >
-                                                Apply
+                                                {uiText.apply}
                                             </Button>
                                         </div>
                                         {fieldErrors.status ? <p className="mt-1 text-xs text-destructive">{fieldErrors.status}</p> : null}
@@ -556,7 +575,7 @@ export default function AdminDashboard() {
                         <div className="grid gap-3 md:grid-cols-4">
                             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by ticket, ward, or issue" />
                             <Select value={moderationFilter} onValueChange={setModerationFilter}>
-                                <SelectTrigger><SelectValue placeholder="Moderation" /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder={uiText.moderation} /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Content</SelectItem>
                                     <SelectItem value="flagged">Flagged Only</SelectItem>
@@ -599,21 +618,26 @@ export default function AdminDashboard() {
                                                 <div className="min-w-0">
                                                     <p className="font-mono text-[11px] text-muted-foreground">{issue.id}</p>
                                                     <p className="mt-1 line-clamp-2 text-sm font-medium">{language === 'mr' ? issue.titleMr : issue.title}</p>
-                                                    {issue.aiSummary ? <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{issue.aiSummary}</p> : null}
+                                                    {(language === 'mr' ? (issue.aiSummaryMr || issue.aiSummary) : issue.aiSummary) ? (
+                                                        <div className="mt-1 space-y-1">
+                                                            <Badge variant="secondary" className="text-[10px]">{aiGeneratedLabel}</Badge>
+                                                            <p className="line-clamp-2 text-xs text-muted-foreground">{language === 'mr' ? (issue.aiSummaryMr || issue.aiSummary) : issue.aiSummary}</p>
+                                                        </div>
+                                                    ) : null}
                                                 </div>
                                                 <StatusBadge status={issue.status} />
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <Badge variant="outline">{getCategoryLabel(issue.category, t, categories)}</Badge>
-                                                <Badge variant="secondary">Priority {(issue.priority || 'p3').toUpperCase()}</Badge>
+                                                <Badge variant="secondary">{uiText.priority} {(issue.priority || 'p3').toUpperCase()}</Badge>
                                                 <Badge variant={issue.moderationFlag ? 'destructive' : 'outline'}>
-                                                    {issue.moderationFlag ? 'Moderation: Review' : 'Moderation: Clear'}
+                                                    {issue.moderationFlag ? uiText.moderationReview : uiText.moderationClear}
                                                 </Badge>
                                                 <span className="text-xs text-muted-foreground">{language === 'mr' ? issue.wardNameMr : issue.wardName}</span>
                                             </div>
                                             {Array.isArray(issue.escalationHistory) && issue.escalationHistory.length > 0 ? (
                                                 <div className="rounded-md border bg-muted/40 p-2 text-xs">
-                                                    <p className="font-medium">Latest escalation</p>
+                                                    <p className="font-medium">{uiText.latestEscalation}</p>
                                                     <p className="text-muted-foreground">
                                                         {issue.escalationHistory[issue.escalationHistory.length - 1]?.fromLevel}{' -> '}{issue.escalationHistory[issue.escalationHistory.length - 1]?.toLevel}
                                                     </p>
@@ -637,7 +661,7 @@ export default function AdminDashboard() {
                                                 <Input
                                                     value={remarksByIssue[issue.id] || ''}
                                                     onChange={(event) => setRemarksByIssue((current) => ({ ...current, [issue.id]: event.target.value }))}
-                                                    placeholder="Optional note"
+                                                    placeholder={uiText.optionalNote}
                                                 />
                                                 {fieldErrors.note ? <p className="text-xs text-destructive">{fieldErrors.note}</p> : null}
                                                 <Select
@@ -659,7 +683,7 @@ export default function AdminDashboard() {
                                                     onClick={() => updatePriority(issue.id)}
                                                     disabled={updatingIssueId === issue.id}
                                                 >
-                                                    Priority
+                                                    {uiText.priority}
                                                 </Button>
                                                 <Select
                                                     value={getEscalationLevel(issue)}
@@ -667,15 +691,15 @@ export default function AdminDashboard() {
                                                 >
                                                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="senior-staff">Senior Staff</SelectItem>
-                                                        <SelectItem value="department-head">Department Head</SelectItem>
-                                                        <SelectItem value="commissioner">Commissioner</SelectItem>
+                                                        <SelectItem value="senior-staff">{uiText.escalationLevelSeniorStaff}</SelectItem>
+                                                        <SelectItem value="department-head">{uiText.escalationLevelDepartmentHead}</SelectItem>
+                                                        <SelectItem value="commissioner">{uiText.escalationLevelCommissioner}</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                                 <Input
                                                     value={escalationReasons[issue.id] || ''}
                                                     onChange={(event) => setEscalationReasons((current) => ({ ...current, [issue.id]: event.target.value }))}
-                                                    placeholder="Escalation reason"
+                                                    placeholder={uiText.escalationReason}
                                                 />
                                                 {fieldErrors.escalationReason ? <p className="text-xs text-destructive">{fieldErrors.escalationReason}</p> : null}
                                                 <Button
@@ -685,7 +709,7 @@ export default function AdminDashboard() {
                                                     onClick={() => applyEscalation(issue.id)}
                                                     disabled={updatingIssueId === issue.id}
                                                 >
-                                                    Escalate
+                                                    {uiText.escalate}
                                                 </Button>
                                                 {issue.moderationFlag ? (
                                                     <Button
@@ -695,7 +719,7 @@ export default function AdminDashboard() {
                                                         onClick={() => markModerationReviewed(issue.id)}
                                                         disabled={updatingIssueId === issue.id}
                                                     >
-                                                        Mark Reviewed
+                                                        {uiText.markReviewed}
                                                     </Button>
                                                 ) : null}
                                                 <Button
@@ -704,7 +728,7 @@ export default function AdminDashboard() {
                                                     onClick={() => updateStatus(issue.id)}
                                                     disabled={updatingIssueId === issue.id}
                                                 >
-                                                    {updatingIssueId === issue.id ? 'Updating...' : 'Apply'}
+                                                    {updatingIssueId === issue.id ? uiText.updating : uiText.apply}
                                                 </Button>
                                                 {fieldErrors.status ? <p className="text-xs text-destructive">{fieldErrors.status}</p> : null}
                                             </div>
@@ -716,7 +740,7 @@ export default function AdminDashboard() {
                                     {filteredIssues.length === 0 ? (
                                         <div className="rounded-lg border py-10 text-center text-muted-foreground">
                                             <ListChecks className="mx-auto mb-2 h-5 w-5" />
-                                            No issues match the current filters.
+                                            {uiText.noIssuesForFilters}
                                         </div>
                                     ) : null}
                                 </div>
@@ -738,15 +762,20 @@ export default function AdminDashboard() {
                                                 <TableCell className="font-mono text-xs">{issue.id}</TableCell>
                                                 <TableCell>
                                                     <p className="font-medium">{language === 'mr' ? issue.titleMr : issue.title}</p>
-                                                    {issue.aiSummary ? <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{issue.aiSummary}</p> : null}
+                                                    {(language === 'mr' ? (issue.aiSummaryMr || issue.aiSummary) : issue.aiSummary) ? (
+                                                        <div className="mt-1 space-y-1">
+                                                            <Badge variant="secondary" className="text-[10px]">{aiGeneratedLabel}</Badge>
+                                                            <p className="line-clamp-2 text-xs text-muted-foreground">{language === 'mr' ? (issue.aiSummaryMr || issue.aiSummary) : issue.aiSummary}</p>
+                                                        </div>
+                                                    ) : null}
                                                     <Badge variant="outline" className="mt-1">{getCategoryLabel(issue.category, t, categories)}</Badge>
-                                                    <Badge variant="secondary" className="ml-2 mt-1">Priority {(issue.priority || 'p3').toUpperCase()}</Badge>
+                                                    <Badge variant="secondary" className="ml-2 mt-1">{uiText.priority} {(issue.priority || 'p3').toUpperCase()}</Badge>
                                                     <Badge variant={issue.moderationFlag ? 'destructive' : 'outline'} className="ml-2 mt-1">
-                                                        {issue.moderationFlag ? 'Moderation: Review' : 'Moderation: Clear'}
+                                                        {issue.moderationFlag ? uiText.moderationReview : uiText.moderationClear}
                                                     </Badge>
                                                     {Array.isArray(issue.escalationHistory) && issue.escalationHistory.length > 0 ? (
                                                         <p className="mt-1 text-xs text-muted-foreground">
-                                                            Escalation: {issue.escalationHistory[issue.escalationHistory.length - 1]?.fromLevel}{' -> '}{issue.escalationHistory[issue.escalationHistory.length - 1]?.toLevel} ({issue.escalationHistory[issue.escalationHistory.length - 1]?.reason})
+                                                            {uiText.escalationLabel}: {issue.escalationHistory[issue.escalationHistory.length - 1]?.fromLevel}{' -> '}{issue.escalationHistory[issue.escalationHistory.length - 1]?.toLevel} ({issue.escalationHistory[issue.escalationHistory.length - 1]?.reason})
                                                         </p>
                                                     ) : null}
                                                 </TableCell>
@@ -769,7 +798,7 @@ export default function AdminDashboard() {
                                                             className="w-[220px]"
                                                             value={remarksByIssue[issue.id] || ''}
                                                             onChange={(event) => setRemarksByIssue((current) => ({ ...current, [issue.id]: event.target.value }))}
-                                                            placeholder="Optional note"
+                                                            placeholder={uiText.optionalNote}
                                                         />
                                                         <Select
                                                             value={getPendingPriority(issue)}
@@ -790,7 +819,7 @@ export default function AdminDashboard() {
                                                             onClick={() => updatePriority(issue.id)}
                                                             disabled={updatingIssueId === issue.id}
                                                         >
-                                                            Priority
+                                                            {uiText.priority}
                                                         </Button>
                                                         <Select
                                                             value={getEscalationLevel(issue)}
@@ -798,16 +827,16 @@ export default function AdminDashboard() {
                                                         >
                                                             <SelectTrigger className="w-[165px]"><SelectValue /></SelectTrigger>
                                                             <SelectContent>
-                                                                <SelectItem value="senior-staff">Senior Staff</SelectItem>
-                                                                <SelectItem value="department-head">Department Head</SelectItem>
-                                                                <SelectItem value="commissioner">Commissioner</SelectItem>
+                                                                <SelectItem value="senior-staff">{uiText.escalationLevelSeniorStaff}</SelectItem>
+                                                                <SelectItem value="department-head">{uiText.escalationLevelDepartmentHead}</SelectItem>
+                                                                <SelectItem value="commissioner">{uiText.escalationLevelCommissioner}</SelectItem>
                                                             </SelectContent>
                                                         </Select>
                                                         <Input
                                                             className="w-[220px]"
                                                             value={escalationReasons[issue.id] || ''}
                                                             onChange={(event) => setEscalationReasons((current) => ({ ...current, [issue.id]: event.target.value }))}
-                                                            placeholder="Escalation reason"
+                                                            placeholder={uiText.escalationReason}
                                                         />
                                                         <Button
                                                             type="button"
@@ -816,7 +845,7 @@ export default function AdminDashboard() {
                                                             onClick={() => applyEscalation(issue.id)}
                                                             disabled={updatingIssueId === issue.id}
                                                         >
-                                                            Escalate
+                                                            {uiText.escalate}
                                                         </Button>
                                                         {issue.moderationFlag ? (
                                                             <Button
@@ -826,7 +855,7 @@ export default function AdminDashboard() {
                                                                 onClick={() => markModerationReviewed(issue.id)}
                                                                 disabled={updatingIssueId === issue.id}
                                                             >
-                                                                Mark Reviewed
+                                                                {uiText.markReviewed}
                                                             </Button>
                                                         ) : null}
                                                         <Button
@@ -835,7 +864,7 @@ export default function AdminDashboard() {
                                                             onClick={() => updateStatus(issue.id)}
                                                             disabled={updatingIssueId === issue.id}
                                                         >
-                                                            {updatingIssueId === issue.id ? 'Updating...' : 'Apply'}
+                                                            {updatingIssueId === issue.id ? uiText.updating : uiText.apply}
                                                         </Button>
                                                     </div>
                                                     {(() => {
@@ -850,7 +879,7 @@ export default function AdminDashboard() {
                                             <TableRow>
                                                 <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                                                     <ListChecks className="mx-auto mb-2 h-5 w-5" />
-                                                    No issues match the current filters.
+                                                    {uiText.noIssuesForFilters}
                                                 </TableCell>
                                             </TableRow>
                                         ) : null}
@@ -866,3 +895,4 @@ export default function AdminDashboard() {
         </div>
     );
 }
+

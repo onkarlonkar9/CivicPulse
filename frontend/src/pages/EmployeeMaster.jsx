@@ -216,11 +216,13 @@ export default function EmployeeMaster() {
 
                     <div className="grid gap-3 md:grid-cols-2">
                         <div>
+                            <p className="mb-1 text-sm font-medium">Full name <span className="text-destructive">*</span></p>
                             <Input placeholder="Full name" value={form.name} onChange={(event) => { setForm((current) => ({ ...current, name: event.target.value })); setFieldErrors((current) => ({ ...current, name: '' })); }} className={fieldErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''} />
                             {fieldErrors.name ? <p className="mt-1 text-xs text-destructive">{fieldErrors.name}</p> : null}
                         </div>
                         <Input placeholder="Employee code auto-generated (EMP-XXXX)" value="Auto-generated on create" disabled />
                         <div>
+                            <p className="mb-1 text-sm font-medium">Designation <span className="text-destructive">*</span></p>
                             <Select value={form.designation} onValueChange={(value) => { setForm((current) => ({ ...current, designation: value })); setFieldErrors((current) => ({ ...current, designation: '' })); }}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select designation" />
@@ -234,21 +236,24 @@ export default function EmployeeMaster() {
                             {fieldErrors.designation ? <p className="mt-1 text-xs text-destructive">{fieldErrors.designation}</p> : null}
                         </div>
                         <div>
+                            <p className="mb-1 text-sm font-medium">Email</p>
                             <Input placeholder="Email (optional)" value={form.email} onChange={(event) => { setForm((current) => ({ ...current, email: event.target.value })); setFieldErrors((current) => ({ ...current, email: '' })); }} className={fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''} />
                             {fieldErrors.email ? <p className="mt-1 text-xs text-destructive">{fieldErrors.email}</p> : null}
                         </div>
                         <div>
+                            <p className="mb-1 text-sm font-medium">Phone</p>
                             <Input placeholder="Phone (optional)" value={form.phone} onChange={(event) => { setForm((current) => ({ ...current, phone: event.target.value })); setFieldErrors((current) => ({ ...current, phone: '' })); }} className={fieldErrors.phone ? 'border-destructive focus-visible:ring-destructive' : ''} />
                             {fieldErrors.phone ? <p className="mt-1 text-xs text-destructive">{fieldErrors.phone}</p> : null}
                         </div>
                         <div>
+                            <p className="mb-1 text-sm font-medium">Temporary password <span className="text-destructive">*</span></p>
                             <Input placeholder="Temporary password" type="password" value={form.password} onChange={(event) => { setForm((current) => ({ ...current, password: event.target.value })); setFieldErrors((current) => ({ ...current, password: '' })); }} className={fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''} />
                             {fieldErrors.password ? <p className="mt-1 text-xs text-destructive">{fieldErrors.password}</p> : null}
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        <p className="text-sm font-medium">Assigned Wards</p>
+                        <p className="text-sm font-medium">Assigned Wards <span className="text-destructive">*</span></p>
                         <div className="flex flex-wrap gap-2">
                             {wards.map((ward) => {
                                 const selected = selectedWardIds.includes(ward.id);
@@ -268,7 +273,7 @@ export default function EmployeeMaster() {
                     </div>
 
                     <div className="space-y-2">
-                        <p className="text-sm font-medium">Task Categories</p>
+                        <p className="text-sm font-medium">Task Categories <span className="text-destructive">*</span></p>
                         <div className="flex flex-wrap gap-2">
                             {categories.map((category) => {
                                 const selected = selectedCategories.includes(category.id);

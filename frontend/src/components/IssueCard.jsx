@@ -8,7 +8,9 @@ import { getCategoryLabel } from '@/lib/categoryLabel.js';
 
 const IssueCard = ({ issue }) => {
     const { language, t } = useTranslation();
+    const aiGeneratedLabel = language === 'mr' ? 'एआय निर्मित' : 'AI generated';
     const title = language === 'mr' ? issue.titleMr : issue.title;
+    const aiSummary = language === 'mr' ? (issue.aiSummaryMr || issue.aiSummary) : issue.aiSummary;
     const ward = language === 'mr' ? issue.wardNameMr : issue.wardName;
     const timeAgo = getTimeAgo(issue.createdAt, language);
     
@@ -31,6 +33,12 @@ const IssueCard = ({ issue }) => {
                             ) : null}
                         </div>
                         <h3 className="font-semibold leading-tight line-clamp-2">{title}</h3>
+                        {aiSummary ? (
+                            <div className="space-y-1">
+                                <Badge variant="secondary" className="text-[10px]">{aiGeneratedLabel}</Badge>
+                                <p className="text-xs text-muted-foreground line-clamp-2">{aiSummary}</p>
+                            </div>
+                        ) : null}
                         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
                                 <MapPin className="h-3.5 w-3.5"/>

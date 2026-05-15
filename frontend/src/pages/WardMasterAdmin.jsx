@@ -381,16 +381,20 @@ export default function WardMasterAdmin() {
                 <>
                     <Card className="border-0 shadow-sm">
                         <CardContent className="space-y-4 p-5">
+                            <p className="text-xs text-muted-foreground">Fields marked <span className="text-destructive">*</span> are mandatory.</p>
                             <div className="grid gap-3 md:grid-cols-3">
                                 <div>
+                                    <p className="mb-1 text-sm font-medium">Source name <span className="text-destructive">*</span></p>
                                     <Input value={wardDataSource.source} onChange={(event) => { setWardDataSource((current) => ({ ...current, source: event.target.value })); setFieldErrors((current) => ({ ...current, source: '' })); }} placeholder="Source name" className={fieldErrors.source ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                     {fieldErrors.source ? <p className="mt-1 text-xs text-destructive">{fieldErrors.source}</p> : null}
                                 </div>
                                 <div>
+                                    <p className="mb-1 text-sm font-medium">Source URL <span className="text-destructive">*</span></p>
                                     <Input value={wardDataSource.url} onChange={(event) => { setWardDataSource((current) => ({ ...current, url: event.target.value })); setFieldErrors((current) => ({ ...current, url: '' })); }} placeholder="Source URL" className={fieldErrors.url ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                     {fieldErrors.url ? <p className="mt-1 text-xs text-destructive">{fieldErrors.url}</p> : null}
                                 </div>
                                 <div>
+                                    <p className="mb-1 text-sm font-medium">Last verified on <span className="text-destructive">*</span></p>
                                     <Input value={wardDataSource.lastVerifiedOn} onChange={(event) => { setWardDataSource((current) => ({ ...current, lastVerifiedOn: event.target.value })); setFieldErrors((current) => ({ ...current, lastVerifiedOn: '' })); }} placeholder="YYYY-MM-DD" className={fieldErrors.lastVerifiedOn ? 'border-destructive focus-visible:ring-destructive' : ''} />
                                     {fieldErrors.lastVerifiedOn ? <p className="mt-1 text-xs text-destructive">{fieldErrors.lastVerifiedOn}</p> : null}
                                 </div>

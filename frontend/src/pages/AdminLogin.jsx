@@ -79,12 +79,12 @@ const AdminLogin = () => {
 
                     <form className="space-y-3" onSubmit={handleSubmit}>
                         <div className="space-y-1.5">
-                            <Label htmlFor="admin-identifier">Phone or Email</Label>
+                            <Label htmlFor="admin-identifier">Phone or Email <span className="text-destructive">*</span></Label>
                             <Input id="admin-identifier" value={form.identifier} onChange={(event) => updateField('identifier', event.target.value)} aria-invalid={Boolean(fieldErrors.identifier)} className={fieldErrors.identifier ? 'border-destructive focus-visible:ring-destructive' : ''} />
                             {fieldErrors.identifier ? <p className="text-xs text-destructive">{fieldErrors.identifier}</p> : null}
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="admin-password">{t('common.password')}</Label>
+                            <Label htmlFor="admin-password">{t('common.password')} <span className="text-destructive">*</span></Label>
                             <Input id="admin-password" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} aria-invalid={Boolean(fieldErrors.password)} className={fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''} />
                             {fieldErrors.password ? <p className="text-xs text-destructive">{fieldErrors.password}</p> : null}
                         </div>

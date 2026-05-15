@@ -27,13 +27,14 @@ import { buildWardMasterFromRemoteData, getWardMaster, parseWardMasterInput, sav
 import { sendOtp, sendSmsMessage } from './otpDelivery.js';
 import { moderateText } from './moderationService.js';
 import { generateIssueSummary } from './summaryService.js';
-import { suggestCategory } from './aiCategorizationService.js';
+import { detectImageAuthenticity, generateIssueNarrative, suggestCategory } from './aiCategorizationService.js';
 
 const app = express();
 const server = http.createServer(app);
 const categoryMap = seededCategoryMap || new Map(categories.map((category) => [category.id, category]));
 const wsServer = new WebSocketServer({ noServer: true });
 const wsClients = new Map();
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 const upload = multer({
     storage: multer.diskStorage({
@@ -171,6 +172,11 @@ const createIssueSchema = z.object({
     latitude: z.coerce.number(),
     longitude: z.coerce.number(),
     locationDescription: z.string().trim().max(200).optional().default(''),
+});
+const duplicatePreviewSchema = z.object({
+    category: z.string().trim().min(1),
+    latitude: z.coerce.number(),
+    longitude: z.coerce.number(),
 });
 
 const wardLookupQuerySchema = z.object({
@@ -901,7 +907,7 @@ app.post('/api/auth/citizen/verify-login-otp', otpRateLimiter, async (req, res) 
     });
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', asyncRoute(async (req, res) => {
     const parsed = loginIdentifierSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -936,7 +942,7 @@ app.post('/api/auth/login', async (req, res) => {
         token: signToken(user),
         user: toPublicUser(user),
     });
-});
+}));
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
     res.json({ user: toPublicUser(req.user) });
@@ -1149,14 +1155,17 @@ app.post('/api/issues', requireAuth, upload.array('photos', 5), asyncHandler(asy
     const categoryInfo = categoryMap.get(category);
     const issueId = buildTicketId(issues);
     const now = new Date().toISOString();
-    const title = categoryInfo ? `${categoryInfo.department} issue near ${ward.nameEn}` : `Civic issue near ${ward.nameEn}`;
-    const aiSummary = generateIssueSummary({
-        title,
+    const fallbackTitle = categoryInfo ? `${categoryInfo.department} issue near ${ward.nameEn}` : `Civic issue near ${ward.nameEn}`;
+    const narrative = await generateIssueNarrative({
         description,
         category,
         wardName: ward.nameEn,
         severity,
     });
+    const title = narrative?.title || fallbackTitle;
+    const titleMr = narrative?.titleMr || title;
+    const aiSummary = narrative?.summary || generateIssueSummary({ title: fallbackTitle, description, category, wardName: ward.nameEn, severity });
+    const aiSummaryMr = narrative?.summaryMr || aiSummary;
 
     const files = req.files || [];
     const imageUrls = files.length > 0 
@@ -1166,10 +1175,11 @@ app.post('/api/issues', requireAuth, upload.array('photos', 5), asyncHandler(asy
     const issue = {
         id: issueId,
         title,
-        titleMr: title,
+        titleMr,
         description,
         descriptionMr: description,
         aiSummary,
+        aiSummaryMr,
         category,
         status: 'new',
         severity,
@@ -1250,6 +1260,34 @@ app.post('/api/issues', requireAuth, upload.array('photos', 5), asyncHandler(asy
         message: 'Issue created successfully',
         ticketId: publicIssue.id,
         issue: publicIssue,
+    });
+}));
+
+app.post('/api/issues/duplicate-preview', asyncHandler(async (req, res) => {
+    const parsed = duplicatePreviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+        sendValidationError(res, '', parsed.error);
+        return;
+    }
+
+    const wardMaster = await getWardMaster();
+    const ward = findWardByCoordinates(parsed.data.latitude, parsed.data.longitude, wardMaster.wards);
+    if (!ward) {
+        res.json({ duplicates: [] });
+        return;
+    }
+
+    const duplicates = await checkDuplicateIssues({
+        category: parsed.data.category,
+        wardId: ward.id,
+        lat: parsed.data.latitude,
+        lng: parsed.data.longitude,
+        description: '',
+        locationDescription: '',
+    });
+
+    res.json({
+        duplicates: duplicates.slice(0, 3).map((issue) => toPublicIssue(sortTimeline(issue), baseUrlFor(req))),
     });
 }));
 
@@ -1466,6 +1504,25 @@ app.post('/api/ai/suggest-category', upload.single('photo'), async (req, res) =>
             confidence: 0.5,
             topCandidates: [{ id: 'other', confidence: 0.5 }],
             provider: 'fallback',
+        });
+    }
+});
+
+app.post('/api/ai/detect-image-authenticity', upload.single('photo'), async (req, res) => {
+    if (!req.file) {
+        res.status(400).json({ message: 'Photo is required' });
+        return;
+    }
+
+    try {
+        const result = await detectImageAuthenticity({
+            imagePath: req.file.path,
+        });
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            message: 'Image authenticity detection failed',
+            error: error.message,
         });
     }
 });

@@ -66,7 +66,7 @@ export default function StatusProgress({ currentStatus, estimatedDays }) {
                 <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-3 text-sm">
                     <AlertCircle className="h-4 w-4 text-blue-600" />
                     <span className="text-blue-900">
-                        Estimated resolution: <strong>{estimatedDays} {estimatedDays === 1 ? 'day' : 'days'}</strong>
+                        {t('issue.estimatedResolution')}: <strong>{estimatedDays} {estimatedDays === 1 ? t('issue.day') : t('landing.days')}</strong>
                     </span>
                 </div>
             )}
@@ -75,7 +75,7 @@ export default function StatusProgress({ currentStatus, estimatedDays }) {
                 <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                     <span className="text-green-900">
-                        <strong>Issue resolved!</strong> Thank you for your patience.
+                        <strong>{t('issue.resolvedTitle')}</strong> {t('issue.thanksPatience')}
                     </span>
                 </div>
             )}
